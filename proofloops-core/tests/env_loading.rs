@@ -57,3 +57,27 @@ fn dotenv_sibling_search_loads_key_when_repo_env_missing() {
     std::env::remove_var("PROOFLOOPS_DOTENV_SEARCH");
     std::env::remove_var("OPENAI_API_KEY");
 }
+
+#[test]
+fn dotenv_search_root_env_is_loaded_before_siblings() {
+    let _g = env_lock().lock().unwrap();
+    let td = tempfile::tempdir().unwrap();
+    let root = td.path().join("covolume");
+    fs::create_dir_all(&root).unwrap();
+
+    // Put the key in the search root itself (the parent workspace case).
+    fs::write(td.path().join(".env"), "OPENAI_API_KEY=FROM_PARENT\n").unwrap();
+    std::env::remove_var("OPENAI_API_KEY");
+    std::env::remove_var("OPENROUTER_API_KEY");
+    std::env::remove_var("GROQ_API_KEY");
+    std::env::set_var("PROOFLOOPS_DOTENV_SEARCH_ROOT", td.path());
+    std::env::set_var("PROOFLOOPS_DOTENV_SEARCH", "1");
+
+    plc::load_dotenv_smart(&root);
+    assert_eq!(std::env::var("OPENAI_API_KEY").unwrap(), "FROM_PARENT");
+
+    // cleanup for other tests
+    std::env::remove_var("PROOFLOOPS_DOTENV_SEARCH_ROOT");
+    std::env::remove_var("PROOFLOOPS_DOTENV_SEARCH");
+    std::env::remove_var("OPENAI_API_KEY");
+}

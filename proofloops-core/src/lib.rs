@@ -625,6 +625,14 @@ pub fn load_dotenv_smart(repo_root: &Path) {
         .map(PathBuf::from)
         .unwrap_or_else(|| repo_root.parent().unwrap_or(repo_root).to_path_buf());
 
+    // Super-workspace convenience: also try the search_root's own `.env` (e.g. `~/dev/.env`)
+    // before scanning sibling directories. This matches the expectation of keeping a single
+    // workspace-wide key file.
+    load_dotenv_if_present(&search_root);
+    if has_any_llm_key() {
+        return;
+    }
+
     let Ok(entries) = std::fs::read_dir(&search_root) else {
         return;
     };
