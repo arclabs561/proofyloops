@@ -112,7 +112,8 @@ pub fn redact_secrets(s: &str) -> String {
     }
     let mut out = s.to_string();
     // KEY=VALUE patterns
-    let re_kv = regex::Regex::new(r"(OPENROUTER_API_KEY|OPENAI_API_KEY)\s*=\s*[^\s]+").ok();
+    let re_kv =
+        regex::Regex::new(r"(OPENROUTER_API_KEY|OPENAI_API_KEY|GROQ_API_KEY)\s*=\s*[^\s]+").ok();
     if let Some(re) = re_kv {
         out = re.replace_all(&out, "$1=[REDACTED]").to_string();
     }
@@ -142,7 +143,7 @@ pub fn redact_secrets(s: &str) -> String {
 /// Include a small tail of the most recent Cursor agent transcript, if present.
 ///
 /// Controls:
-/// - `PROOFLOOPS_REVIEW_INCLUDE_TRANSCRIPT` (default: on) (legacy: `PROOFYLOOPS_REVIEW_INCLUDE_TRANSCRIPT`)
+/// - `PROOFLOOPS_REVIEW_INCLUDE_TRANSCRIPT` (default: off) (legacy: `PROOFYLOOPS_REVIEW_INCLUDE_TRANSCRIPT`)
 /// - `PROOFLOOPS_REVIEW_TRANSCRIPT_PATH` (explicit file path override) (legacy: `PROOFYLOOPS_REVIEW_TRANSCRIPT_PATH`)
 pub fn agent_transcript_tail(max_bytes: usize) -> String {
     // Default OFF: transcript tails often contain unrelated tool output and may include secrets.
@@ -557,10 +558,12 @@ mod tests {
 
     #[test]
     fn redact_secrets_redacts_common_patterns() {
-        let s = "OPENROUTER_API_KEY=abc\nAuthorization: Bearer sk-1234567890abcdef\nsk-1234567890abcdef";
+        let s = "OPENROUTER_API_KEY=abc\nGROQ_API_KEY=def\nAuthorization: Bearer sk-1234567890abcdef\nsk-1234567890abcdef";
         let r = redact_secrets(s);
         assert!(!r.contains("abc"));
+        assert!(!r.contains("def"));
         assert!(r.contains("OPENROUTER_API_KEY=[REDACTED]"));
+        assert!(r.contains("GROQ_API_KEY=[REDACTED]"));
         assert!(r
             .to_lowercase()
             .contains("authorization: bearer [redacted]"));

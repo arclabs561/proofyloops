@@ -1535,7 +1535,8 @@ pub async fn verify_lean_text(
         stderr,
         cmd: cmd_vec,
         cwd: repo_root.display().to_string(),
-        tmp_file: Some(tmp_path_buf.display().to_string()),
+        // We delete the temp file before returning; keep output truthful.
+        tmp_file: None,
     })
 }
 
@@ -1554,10 +1555,10 @@ pub async fn verify_lean_file(
     // Prefer verifying the real file path. This avoids module-resolution problems for repos
     // that use their own module roots (e.g. `MIL.*`) and haven’t been built yet.
     let lake = resolve_lake();
-    if env_truthy("PROOFLOOPS_AUTO_BUILD", true)
-        || env_truthy("PROOFYLOOPS_AUTO_BUILD", true)
-            && !repo_root.join(".lake/build/lib/lean").exists()
-    {
+    let auto_build =
+        env_truthy("PROOFLOOPS_AUTO_BUILD", true) || env_truthy("PROOFYLOOPS_AUTO_BUILD", true);
+    // Only build if output dir is missing (avoid redundant builds).
+    if auto_build && !repo_root.join(".lake/build/lib/lean").exists() {
         let mut build_cmd = Command::new(&lake);
         build_cmd.arg("build").current_dir(&repo_root);
         let _ = tokio::time::timeout(timeout_s, build_cmd.output()).await;
