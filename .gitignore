@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# Rust build artifacts (proofyloops-core, mcp-server)
+target/
+**/target/
+
+# Local env
+.env
+

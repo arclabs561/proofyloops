@@ -1,0 +1,27 @@
+[package]
+name = "proofyloops-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+description = "Rust core for proofyloops (Lean excerpt/patch/verify + prompt construction)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.10"
+tokio = { version = "1", features = ["process", "time", "rt-multi-thread", "macros"] }
+dirs = "5.0"
+reqwest = { version = "0.13.1", features = ["json", "webpki-roots", "stream"] }
+sha2 = "0.10.9"
+hex = "0.4.3"
+
+# This crate lives inside a large dev super-workspace; keep it buildable in isolation.
+[workspace]
+
+[[bin]]
+name = "proofyloops"
+path = "src/bin/proofyloops.rs"
+
