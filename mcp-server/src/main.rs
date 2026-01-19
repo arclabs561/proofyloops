@@ -43,7 +43,7 @@ use rmcp::{
 #[cfg(feature = "stdio")]
 use schemars::JsonSchema;
 #[cfg(feature = "stdio")]
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 fn default_proofloops_root() -> PathBuf {
     // `.../proofloops/mcp-server` → `.../proofloops`
@@ -1352,6 +1352,81 @@ struct AgentStepArgs {
 }
 
 #[cfg(feature = "stdio")]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+struct PromptArgs {
+    repo_root: String,
+    file: String,
+    lemma: String,
+    #[serde(default)]
+    timeout_s: Option<u64>,
+    // Schema compatibility only (unused).
+    #[serde(default)]
+    proofloops_root: Option<String>,
+}
+
+#[cfg(feature = "stdio")]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+struct VerifyArgs {
+    repo_root: String,
+    file: String,
+    #[serde(default)]
+    timeout_s: Option<u64>,
+    // Schema compatibility only (unused).
+    #[serde(default)]
+    proofloops_root: Option<String>,
+}
+
+#[cfg(feature = "stdio")]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+struct LocateSorriesArgs {
+    repo_root: String,
+    file: String,
+    #[serde(default)]
+    max_results: Option<u64>,
+    #[serde(default)]
+    context_lines: Option<u64>,
+}
+
+#[cfg(feature = "stdio")]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+struct PatchRegionArgs {
+    repo_root: String,
+    file: String,
+    start_line: u64,
+    end_line: u64,
+    replacement: String,
+    #[serde(default)]
+    timeout_s: Option<u64>,
+}
+
+#[cfg(feature = "stdio")]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+struct PatchArgs {
+    repo_root: String,
+    file: String,
+    lemma: String,
+    replacement: String,
+    #[serde(default)]
+    timeout_s: Option<u64>,
+    // Schema compatibility only (unused).
+    #[serde(default)]
+    proofloops_root: Option<String>,
+}
+
+#[cfg(feature = "stdio")]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+struct SuggestArgs {
+    repo_root: String,
+    file: String,
+    lemma: String,
+    #[serde(default)]
+    timeout_s: Option<u64>,
+    // Schema compatibility only (unused).
+    #[serde(default)]
+    proofloops_root: Option<String>,
+}
+
+#[cfg(feature = "stdio")]
 #[derive(Clone)]
 struct ProofloopsStdioMcp {
     tool_router: RmcpToolRouter<Self>,
@@ -1597,11 +1672,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Extract the (system,user) prompt + excerpt for a lemma (`proofloops prompt`).")]
     async fn proofloops_prompt(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<PromptArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsPromptTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
@@ -1610,11 +1687,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Elaboration-check a file (`proofloops verify`).")]
     async fn proofloops_verify(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<VerifyArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsVerifyTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
@@ -1623,11 +1702,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Elaboration-check a file, returning a small summary plus raw output (`proofloops verify`).")]
     async fn proofloops_verify_summary(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<VerifyArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsVerifySummaryTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
@@ -1636,11 +1717,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Locate `sorry` tokens in a file with line/col and suggested patch regions.")]
     async fn proofloops_locate_sorries(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<LocateSorriesArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsLocateSorriesTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
@@ -1649,11 +1732,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Suggest a proof by running the configured LLM router (`proofloops suggest`).")]
     async fn proofloops_suggest(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<SuggestArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsSuggestTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
@@ -1662,11 +1747,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Patch a lemma’s first `sorry` with provided Lean code, then verify (`proofloops patch`).")]
     async fn proofloops_patch(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<PatchArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsPatchTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
@@ -1675,11 +1762,13 @@ impl ProofloopsStdioMcp {
     #[tool(description = "Patch the first `sorry` within a (line-based) region and verify.")]
     async fn proofloops_patch_region(
         &self,
-        params: Parameters<serde_json::Value>,
+        params: Parameters<PatchRegionArgs>,
     ) -> Result<CallToolResult, McpError> {
         let tool = ProofloopsPatchRegionTool;
+        let v = serde_json::to_value(&params.0)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
-            .call(&params.0)
+            .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
         Ok(CallToolResult::success(vec![Content::text(out.to_string())]))
