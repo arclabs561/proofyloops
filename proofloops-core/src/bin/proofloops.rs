@@ -1051,6 +1051,7 @@ fn main() -> Result<(), String> {
 
             let mut table = Vec::new();
             let mut items = Vec::new();
+            let mut next_actions = Vec::new();
 
             for file in &files {
                 let raw = rt
@@ -1087,6 +1088,78 @@ fn main() -> Result<(), String> {
 
                 let locs =
                     plc::locate_sorries_in_file(&repo_root, file, max_sorries, context_lines)?;
+
+                // Flatten into agent-ready next actions.
+                for e in &error_samples {
+                    next_actions.push(json!({
+                        "kind": "fix_error",
+                        "file": file,
+                        "message": e,
+                        "research": {
+                            "mcp_calls": [
+                                {
+                                    "server": "user-arxiv-semantic-search-mcp",
+                                    "tool": "search_papers",
+                                    "arguments": { "query": format!("Lean 4 {}", e) }
+                                }
+                            ]
+                        }
+                    }));
+                }
+                for w in &warning_samples {
+                    next_actions.push(json!({
+                        "kind": "fix_warning",
+                        "file": file,
+                        "message": w,
+                        "research": {
+                            "mcp_calls": [
+                                {
+                                    "server": "user-arxiv-semantic-search-mcp",
+                                    "tool": "search_papers",
+                                    "arguments": { "query": format!("Lean 4 {}", w) }
+                                }
+                            ]
+                        }
+                    }));
+                }
+                for loc in &locs {
+                    // Domain-ish queries keyed off the enclosing declaration name when we have it.
+                    let decl = loc
+                        .decl_name
+                        .clone()
+                        .unwrap_or_else(|| "unknown_decl".to_string());
+                    let q = if decl.contains("nathanson") || decl.contains("polygonal") {
+                        "Fermat polygonal number theorem Nathanson proof b^2 < 4a 3a < b^2 + 2b + 4 Cauchy lemma"
+                            .to_string()
+                    } else if decl.contains("cauchy_lemma") {
+                        "Cauchy lemma b^2 < 4a 0 < b^2 + 2b - 3a + 4 a = sum of four squares b = sum of variables"
+                            .to_string()
+                    } else if decl.contains("sum_three_squares") || decl.contains("Legendre") {
+                        "sum of three squares theorem residue classes mod 8 remaining cases 2 5 6"
+                            .to_string()
+                    } else {
+                        format!("Lean proof {}", decl)
+                    };
+                    next_actions.push(json!({
+                        "kind": "fix_sorry",
+                        "file": file,
+                        "token": loc.token,
+                        "line": loc.line,
+                        "decl_kind": loc.decl_kind,
+                        "decl_name": loc.decl_name,
+                        "decl_line": loc.decl_line,
+                        "excerpt": loc.excerpt,
+                        "research": {
+                            "mcp_calls": [
+                                {
+                                    "server": "user-arxiv-semantic-search-mcp",
+                                    "tool": "search_papers",
+                                    "arguments": { "query": q }
+                                }
+                            ]
+                        }
+                    }));
+                }
 
                 table.push(json!({
                     "file": file,
@@ -1206,6 +1279,7 @@ fn main() -> Result<(), String> {
             let out = json!({
                 "repo_root": repo_root.display().to_string(),
                 "table": table,
+                "next_actions": next_actions,
                 "html_path": report_path_out,
             });
             println!("{}", out.to_string());
