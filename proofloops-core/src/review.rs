@@ -51,13 +51,16 @@ fn env_truthy(name: &str, default_on: bool) -> bool {
 /// Emit progress events to stderr.
 ///
 /// Controls:
-/// - `PROOFYLOOPS_REVIEW_PROGRESS`:
+/// - `PROOFLOOPS_REVIEW_PROGRESS` (legacy: `PROOFYLOOPS_REVIEW_PROGRESS`):
 ///   - "pretty" (default) prints one-line human logs
 ///   - "jsonl" prints JSONL lines
 ///   - "pretty,jsonl" does both
 ///   - "0/off/false/no" disables
 pub fn emit_progress(root: &Path, mut ev: ProgressEvent) {
-    let mode = env_mode("PROOFYLOOPS_REVIEW_PROGRESS", "pretty");
+    let mode = std::env::var("PROOFLOOPS_REVIEW_PROGRESS")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| env_mode("PROOFYLOOPS_REVIEW_PROGRESS", "pretty"));
     if matches!(mode.as_str(), "0" | "off" | "false" | "no") {
         return;
     }
@@ -81,7 +84,8 @@ pub fn emit_progress(root: &Path, mut ev: ProgressEvent) {
             eprintln!("{line}");
         }
         // Optional JSONL file output (git-ignored location).
-        let p = std::env::var("PROOFYLOOPS_REVIEW_PROGRESS_FILE")
+        let p = std::env::var("PROOFLOOPS_REVIEW_PROGRESS_FILE")
+            .or_else(|_| std::env::var("PROOFYLOOPS_REVIEW_PROGRESS_FILE"))
             .ok()
             .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from)
@@ -138,14 +142,17 @@ pub fn redact_secrets(s: &str) -> String {
 /// Include a small tail of the most recent Cursor agent transcript, if present.
 ///
 /// Controls:
-/// - `PROOFYLOOPS_REVIEW_INCLUDE_TRANSCRIPT` (default: on)
-/// - `PROOFYLOOPS_REVIEW_TRANSCRIPT_PATH` (explicit file path override)
+/// - `PROOFLOOPS_REVIEW_INCLUDE_TRANSCRIPT` (default: on) (legacy: `PROOFYLOOPS_REVIEW_INCLUDE_TRANSCRIPT`)
+/// - `PROOFLOOPS_REVIEW_TRANSCRIPT_PATH` (explicit file path override) (legacy: `PROOFYLOOPS_REVIEW_TRANSCRIPT_PATH`)
 pub fn agent_transcript_tail(max_bytes: usize) -> String {
     // Default OFF: transcript tails often contain unrelated tool output and may include secrets.
-    if !env_truthy("PROOFYLOOPS_REVIEW_INCLUDE_TRANSCRIPT", false) {
+    if !env_truthy("PROOFLOOPS_REVIEW_INCLUDE_TRANSCRIPT", false)
+        && !env_truthy("PROOFYLOOPS_REVIEW_INCLUDE_TRANSCRIPT", false)
+    {
         return String::new();
     }
-    let explicit = std::env::var("PROOFYLOOPS_REVIEW_TRANSCRIPT_PATH")
+    let explicit = std::env::var("PROOFLOOPS_REVIEW_TRANSCRIPT_PATH")
+        .or_else(|_| std::env::var("PROOFYLOOPS_REVIEW_TRANSCRIPT_PATH"))
         .ok()
         .unwrap_or_default()
         .trim()

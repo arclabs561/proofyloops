@@ -143,7 +143,7 @@ fn summarize_verify_like_output(raw: &Value) -> Value {
 }
 
 // NOTE: The MCP server used to bridge to a Python CLI.
-// It is Rust-native now (proofyloops-core has the provider router), so there is no reason to shell out.
+// It is Rust-native now (proofloops-core has the provider router), so there is no reason to shell out.
 
 fn proofloops_root_from_args(args: &Value) -> Result<PathBuf, String> {
     if let Ok(env_root) = std::env::var("PROOFLOOPS_ROOT") {
@@ -163,7 +163,11 @@ fn proofloops_root_from_args(args: &Value) -> Result<PathBuf, String> {
 }
 
 fn repo_root_from_args(args: &Value) -> Result<PathBuf, String> {
-    Ok(PathBuf::from(extract_string(args, "repo_root")?))
+    let repo_root = PathBuf::from(extract_string(args, "repo_root")?);
+    // Parse `proofloops_root` / `proofyloops_root` (legacy) to keep schemas honest,
+    // but do not use it for anything. Repo-root resolution is independent of helper-root.
+    let _ = proofloops_root_from_args(args)?;
+    Ok(repo_root)
 }
 
 struct ProofyloopsPromptTool;
@@ -171,7 +175,7 @@ struct ProofyloopsPromptTool;
 #[async_trait]
 impl Tool for ProofyloopsPromptTool {
     fn description(&self) -> &str {
-        "Extract the (system,user) prompt + excerpt for a lemma (`proofyloops prompt`)."
+        "Extract the (system,user) prompt + excerpt for a lemma (`proofloops prompt`)."
     }
 
     fn schema(&self) -> Value {
@@ -182,7 +186,8 @@ impl Tool for ProofyloopsPromptTool {
                 "file": { "type": "string", "description": "File path relative to repo root" },
                 "lemma": { "type": "string", "description": "Lemma name to extract" },
                 "timeout_s": { "type": "integer", "default": 30 },
-                "proofyloops_root": { "type": "string", "description": "Path to proofyloops (defaults to sibling of this crate)" }
+                "proofloops_root": { "type": "string", "description": "Path to proofloops (defaults to sibling of this crate)" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -205,7 +210,7 @@ struct ProofyloopsVerifyTool;
 #[async_trait]
 impl Tool for ProofyloopsVerifyTool {
     fn description(&self) -> &str {
-        "Elaboration-check a file (`proofyloops verify`)."
+        "Elaboration-check a file (`proofloops verify`)."
     }
 
     fn schema(&self) -> Value {
@@ -215,7 +220,8 @@ impl Tool for ProofyloopsVerifyTool {
                 "repo_root": { "type": "string" },
                 "file": { "type": "string", "description": "File path relative to repo root" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofyloops_root": { "type": "string" }
+                "proofloops_root": { "type": "string" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file"]
         })
@@ -236,7 +242,7 @@ struct ProofyloopsVerifySummaryTool;
 #[async_trait]
 impl Tool for ProofyloopsVerifySummaryTool {
     fn description(&self) -> &str {
-        "Elaboration-check a file, returning a small summary plus raw output (`proofyloops verify`)."
+        "Elaboration-check a file, returning a small summary plus raw output (`proofloops verify`)."
     }
 
     fn schema(&self) -> Value {
@@ -246,7 +252,8 @@ impl Tool for ProofyloopsVerifySummaryTool {
                 "repo_root": { "type": "string" },
                 "file": { "type": "string", "description": "File path relative to repo root" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofyloops_root": { "type": "string" }
+                "proofloops_root": { "type": "string" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file"]
         })
@@ -269,7 +276,7 @@ struct ProofyloopsSuggestTool;
 #[async_trait]
 impl Tool for ProofyloopsSuggestTool {
     fn description(&self) -> &str {
-        "Suggest a proof by running the configured LLM router (`proofyloops suggest`)."
+        "Suggest a proof by running the configured LLM router (`proofloops suggest`)."
     }
 
     fn schema(&self) -> Value {
@@ -280,7 +287,8 @@ impl Tool for ProofyloopsSuggestTool {
                 "file": { "type": "string" },
                 "lemma": { "type": "string" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofyloops_root": { "type": "string" }
+                "proofloops_root": { "type": "string" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -319,7 +327,7 @@ struct ProofyloopsPatchTool;
 #[async_trait]
 impl Tool for ProofyloopsPatchTool {
     fn description(&self) -> &str {
-        "Patch a lemma’s first `sorry` with provided Lean code, then verify (`proofyloops patch`)."
+        "Patch a lemma’s first `sorry` with provided Lean code, then verify (`proofloops patch`)."
     }
 
     fn schema(&self) -> Value {
@@ -331,7 +339,8 @@ impl Tool for ProofyloopsPatchTool {
                 "lemma": { "type": "string" },
                 "replacement": { "type": "string", "description": "Lean proof-term text to splice in (no markdown fences)" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofyloops_root": { "type": "string" }
+                "proofloops_root": { "type": "string" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file", "lemma", "replacement"]
         })
@@ -1061,7 +1070,7 @@ impl Tool for ProofyloopsReportHtmlTool {
         let report_path = match output_path {
             Some(p) => std::path::PathBuf::from(p),
             None => std::env::temp_dir()
-                .join(format!("proofyloops-report-{}.html", uuid::Uuid::new_v4())),
+                .join(format!("proofloops-report-{}.html", uuid::Uuid::new_v4())),
         };
         if let Some(parent) = report_path.parent() {
             std::fs::create_dir_all(parent)
@@ -1070,12 +1079,12 @@ impl Tool for ProofyloopsReportHtmlTool {
 
         let mut html = String::new();
         html.push_str("<!doctype html>\n<html><head><meta charset=\"utf-8\"/>\n");
-        html.push_str("<title>proofyloops report</title>\n");
+        html.push_str("<title>proofloops report</title>\n");
         html.push_str(
             "<style>body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1200px;margin:24px auto;padding:0 16px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;vertical-align:top}th{background:#f6f6f6;text-align:left}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\"Liberation Mono\",monospace}pre{white-space:pre-wrap}</style>\n",
         );
         html.push_str("</head><body>\n");
-        html.push_str("<h2>proofyloops report</h2>\n");
+        html.push_str("<h2>proofloops report</h2>\n");
         html.push_str(&format!(
             "<p><b>repo_root</b>: <code>{}</code></p>\n",
             escape_html(&repo_root.display().to_string())
@@ -1164,7 +1173,8 @@ impl Tool for ProofyloopsRubberduckPromptTool {
                 "file": { "type": "string" },
                 "lemma": { "type": "string" },
                 "diagnostics": { "type": "string", "description": "Optional Lean output/error context to include (raw stdout/stderr excerpt or JSON)" },
-                "proofyloops_root": { "type": "string" }
+                "proofloops_root": { "type": "string" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -1186,7 +1196,7 @@ struct ProofyloopsLoopTool;
 #[async_trait]
 impl Tool for ProofyloopsLoopTool {
     fn description(&self) -> &str {
-        "Bounded loop: suggest → patch first `sorry` in lemma → verify (`proofyloops loop`)."
+        "Bounded loop: suggest → patch first `sorry` in lemma → verify (`proofloops loop`)."
     }
 
     fn schema(&self) -> Value {
@@ -1198,7 +1208,8 @@ impl Tool for ProofyloopsLoopTool {
                 "lemma": { "type": "string" },
                 "max_iters": { "type": "integer", "default": 3 },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofyloops_root": { "type": "string" }
+                "proofloops_root": { "type": "string" },
+                "proofyloops_root": { "type": "string", "description": "Legacy alias for proofloops_root" }
             },
             "required": ["repo_root", "file", "lemma"]
         })

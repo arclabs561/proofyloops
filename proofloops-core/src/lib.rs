@@ -358,7 +358,7 @@ pub fn find_lean_repo_root(start: &Path) -> Result<PathBuf, String> {
         for _ in 0..80 {
             if cur.join("leanpkg.toml").exists() {
                 return Err(format!(
-                    "Lean 3 project detected at {} (found leanpkg.toml). proofyloops-core currently supports Lean 4 (Lake) projects only.",
+                    "Lean 3 project detected at {} (found leanpkg.toml). proofloops-core currently supports Lean 4 (Lake) projects only.",
                     cur.display()
                 ));
             }
@@ -1337,9 +1337,12 @@ pub async fn verify_lean_text(
     // Fresh repos often need an initial `lake build` so project modules exist as `.olean` in
     // `.lake/build/lib/lean` (Lean's search path is typically olean-based, not source-based).
     // We only do this when the build output directory is missing, and can be disabled.
-    if env_truthy("PROOFYLOOPS_AUTO_BUILD", true)
-        && !repo_root.join(".lake/build/lib/lean").exists()
-    {
+    //
+    // Env:
+    // - `PROOFLOOPS_AUTO_BUILD` (legacy: `PROOFYLOOPS_AUTO_BUILD`)
+    let auto_build =
+        env_truthy("PROOFLOOPS_AUTO_BUILD", true) || env_truthy("PROOFYLOOPS_AUTO_BUILD", true);
+    if auto_build && !repo_root.join(".lake/build/lib/lean").exists() {
         let mut build_cmd = Command::new(&lake);
         build_cmd.arg("build").current_dir(&repo_root);
         let build_out = tokio::time::timeout(timeout_s, build_cmd.output())
@@ -1432,7 +1435,7 @@ pub async fn verify_lean_text(
     // If we hit a missing-olean error, do a one-time `lake build` and retry once.
     if !ok
         && !timeout
-        && env_truthy("PROOFYLOOPS_AUTO_BUILD", true)
+        && (env_truthy("PROOFLOOPS_AUTO_BUILD", true) || env_truthy("PROOFYLOOPS_AUTO_BUILD", true))
         && looks_like_missing_olean(&stdout, &stderr)
     {
         let mut build_cmd = Command::new(&lake);
@@ -1528,8 +1531,9 @@ pub async fn verify_lean_file(
     // Prefer verifying the real file path. This avoids module-resolution problems for repos
     // that use their own module roots (e.g. `MIL.*`) and haven’t been built yet.
     let lake = resolve_lake();
-    if env_truthy("PROOFYLOOPS_AUTO_BUILD", true)
-        && !repo_root.join(".lake/build/lib/lean").exists()
+    if env_truthy("PROOFLOOPS_AUTO_BUILD", true)
+        || env_truthy("PROOFYLOOPS_AUTO_BUILD", true)
+            && !repo_root.join(".lake/build/lib/lean").exists()
     {
         let mut build_cmd = Command::new(&lake);
         build_cmd.arg("build").current_dir(&repo_root);
@@ -1570,7 +1574,7 @@ pub async fn verify_lean_file(
     // If we hit a missing-olean error, do a one-time `lake build` and retry once.
     let (ok, timeout, returncode, stdout, stderr) = if !ok
         && !timeout
-        && env_truthy("PROOFYLOOPS_AUTO_BUILD", true)
+        && (env_truthy("PROOFLOOPS_AUTO_BUILD", true) || env_truthy("PROOFYLOOPS_AUTO_BUILD", true))
         && looks_like_missing_olean(&stdout, &stderr)
     {
         let mut build_cmd = Command::new(&lake);

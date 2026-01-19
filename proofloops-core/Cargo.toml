@@ -22,8 +22,3 @@ hex = "0.4.3"
 name = "proofloops"
 path = "src/bin/proofloops.rs"
 
-[[bin]]
-# Compatibility alias: historical CLI name.
-name = "proofyloops"
-path = "src/bin/proofyloops.rs"
-

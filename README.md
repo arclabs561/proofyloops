@@ -92,7 +92,7 @@ cd /Users/arc/Documents/dev/proofloops/proofloops-core
 cargo run --quiet --bin proofloops -- triage-file \
   --repo /Users/arc/Documents/dev/geometry-of-numbers \
   --file Covolume/Cauchy/Main.lean \
-  --output-json /tmp/proofyloops-triage.json
+  --output-json /tmp/proofloops-triage.json
 ```
 
 Build a “context pack” (imports + focused excerpt + nearby decl headers):
@@ -118,7 +118,7 @@ cd /Users/arc/Documents/dev/proofloops/proofloops-core
 cargo run --quiet --bin proofloops -- agent-step \
   --repo /Users/arc/Documents/dev/geometry-of-numbers \
   --file Covolume/Cauchy/Main.lean \
-  --output-json /tmp/proofyloops-agent-step.json
+  --output-json /tmp/proofloops-agent-step.json
 ```
 
 Write back to the file:
@@ -129,7 +129,7 @@ cargo run --quiet --bin proofloops -- agent-step \
   --repo /Users/arc/Documents/dev/geometry-of-numbers \
   --file Covolume/Cauchy/Main.lean \
   --write \
-  --output-json /tmp/proofyloops-agent-step-write.json
+  --output-json /tmp/proofloops-agent-step-write.json
 ```
 
 ### MCP tool: `proofloops_agent_step`
@@ -199,7 +199,7 @@ cargo run --quiet --bin proofloops -- review-diff \
   --repo /Users/arc/Documents/dev/geometry-of-numbers \
   --scope worktree \
   --prompt-only \
-  --output-json /tmp/proofyloops-review-diff-prompt.json
+  --output-json /tmp/proofloops-review-diff-prompt.json
 ```
 
 Build a bounded review context pack for a git diff (no LLM call; safe-path filtering + optional transcript tail):
@@ -211,7 +211,7 @@ cargo run --quiet --bin proofloops -- review-prompt \
   --scope worktree \
   --max-total-bytes 180000 \
   --per-file-bytes 24000 \
-  --output-json /tmp/proofyloops-review-prompt.json
+  --output-json /tmp/proofloops-review-prompt.json
 ```
 
 ## MCP server (axum-mcp)
@@ -257,10 +257,10 @@ Tools:
 Notes:
 - **Lean 4 only (for now)**: if a repo has `leanpkg.toml`, we treat it as Lean 3 and error early.
 - **Patch semantics**: we replace the first `sorry` *token* on the matched line (not the whole line).
-  - Example (`proofyloops_patch_region`):
+  - Example (`proofloops_patch_region`):
     - before: `def double (n : Nat) : Nat := sorry`
     - after:  `def double (n : Nat) : Nat := n + n`
-  - Example (`proofyloops_patch_region` on an instance field):
+  - Example (`proofloops_patch_region` on an instance field):
     - before: `pure_bind := by sorry`
     - after:  `pure_bind := by simp`
   - If the original line already contains `... := by sorry` and your replacement starts with `by ...`,
