@@ -1106,22 +1106,6 @@ fn main() -> Result<(), String> {
                         }
                     }));
                 }
-                for w in &warning_samples {
-                    next_actions.push(json!({
-                        "kind": "fix_warning",
-                        "file": file,
-                        "message": w,
-                        "research": {
-                            "mcp_calls": [
-                                {
-                                    "server": "user-arxiv-semantic-search-mcp",
-                                    "tool": "search_papers",
-                                    "arguments": { "query": format!("Lean 4 {}", w) }
-                                }
-                            ]
-                        }
-                    }));
-                }
                 for loc in &locs {
                     // Domain-ish queries keyed off the enclosing declaration name when we have it.
                     let decl = loc
@@ -1155,6 +1139,23 @@ fn main() -> Result<(), String> {
                                     "server": "user-arxiv-semantic-search-mcp",
                                     "tool": "search_papers",
                                     "arguments": { "query": q }
+                                }
+                            ]
+                        }
+                    }));
+                }
+                // Warnings last: they are useful, but proof-blocking work is usually sorries/errors.
+                for w in &warning_samples {
+                    next_actions.push(json!({
+                        "kind": "fix_warning",
+                        "file": file,
+                        "message": w,
+                        "research": {
+                            "mcp_calls": [
+                                {
+                                    "server": "user-arxiv-semantic-search-mcp",
+                                    "tool": "search_papers",
+                                    "arguments": { "query": format!("Lean 4 {}", w) }
                                 }
                             ]
                         }
