@@ -65,6 +65,7 @@ fn usage() -> String {
         "  lint-style  --repo <path> [--github] --module <Root> [--module <Root> ...]",
         "  report      --repo <path> --files <relpath>... [--timeout-s N] [--max-sorries N] [--context-lines N] [--include-raw-verify] [--output-html <path>]",
         "  research-ingest --input <path> [--output-json <path>]",
+        "  research-attach --report-json <path> --research-notes <path> [--top-k N] [--output-json <path>]",
         "  context-pack --repo <path> --file <relpath> [--decl <name> | --line N] [--context-lines N] [--nearby-lines N] [--max-nearby N] [--max-imports N]",
         "",
         "Notes:",
@@ -1459,6 +1460,41 @@ fn main() -> Result<(), String> {
                 serde_json::from_str(&txt).map_err(|e| format!("json parse: {e}"))?;
             let notes = plc::ingest_research_json(&v);
             let out = serde_json::to_value(notes).map_err(|e| format!("json encode: {e}"))?;
+
+            if let Some(p) = output_json {
+                write_json(&p, &out)?;
+                println!(
+                    "{}",
+                    json!({"ok": true, "written": p.display().to_string()}).to_string()
+                );
+            } else {
+                println!("{}", out.to_string());
+            }
+            Ok(())
+        }
+
+        "research-attach" => {
+            let report_path = arg_value(rest, "--report-json")
+                .ok_or_else(|| "missing --report-json".to_string())
+                .map(PathBuf::from)?;
+            let notes_path = arg_value(rest, "--research-notes")
+                .ok_or_else(|| "missing --research-notes".to_string())
+                .map(PathBuf::from)?;
+            let top_k = arg_u64(rest, "--top-k").unwrap_or(3) as usize;
+            let output_json = arg_value(rest, "--output-json").map(PathBuf::from);
+
+            let report_txt = std::fs::read_to_string(&report_path)
+                .map_err(|e| format!("read {}: {e}", report_path.display()))?;
+            let mut report_v: serde_json::Value =
+                serde_json::from_str(&report_txt).map_err(|e| format!("json parse: {e}"))?;
+
+            let notes_txt = std::fs::read_to_string(&notes_path)
+                .map_err(|e| format!("read {}: {e}", notes_path.display()))?;
+            let notes: plc::ResearchNotes =
+                serde_json::from_str(&notes_txt).map_err(|e| format!("json parse: {e}"))?;
+
+            plc::attach_research_matches_to_next_actions(&mut report_v, &notes, top_k);
+            let out = report_v;
 
             if let Some(p) = output_json {
                 write_json(&p, &out)?;

@@ -196,6 +196,164 @@ pub fn ingest_research_json(v: &serde_json::Value) -> ResearchNotes {
     }
 }
 
+fn is_stopword(s: &str) -> bool {
+    matches!(
+        s,
+        // ultra-common English
+        "the" | "and" | "for" | "with" | "that" | "this" | "from" | "into" | "then" | "than"
+            | "also" | "only" | "just" | "some" | "more" | "most" | "when" | "where" | "what"
+            | "which" | "while" | "will" | "should" | "would" | "could"
+            // Lean/common proof noise
+            | "lean" | "mathlib" | "proof" | "lemma" | "theorem" | "def" | "have" | "intro"
+            | "exact" | "simp" | "cases" | "case" | "by" | "sorry" | "admit"
+            | "file" | "line" | "col" | "warning" | "error"
+            // local path noise (common in our logs)
+            | "users" | "arc" | "documents" | "dev"
+    )
+}
+
+fn tokenize(s: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut cur = String::new();
+    for ch in s.chars() {
+        if ch.is_ascii_alphanumeric() {
+            cur.push(ch.to_ascii_lowercase());
+        } else if !cur.is_empty() {
+            if cur.len() >= 3 {
+                let tok = std::mem::take(&mut cur);
+                if !is_stopword(&tok) {
+                    out.insert(tok);
+                }
+            } else {
+                cur.clear();
+            }
+        }
+    }
+    if cur.len() >= 3 {
+        if !is_stopword(&cur) {
+            out.insert(cur);
+        }
+    }
+    out
+}
+
+fn overlap_and_jaccard(a: &HashSet<String>, b: &HashSet<String>) -> (usize, f32) {
+    if a.is_empty() || b.is_empty() {
+        return (0, 0.0);
+    }
+    let mut inter = 0usize;
+    for x in a {
+        if b.contains(x) {
+            inter += 1;
+        }
+    }
+    let union = a.len() + b.len() - inter;
+    if union == 0 {
+        (inter, 0.0)
+    } else {
+        (inter, (inter as f32) / (union as f32))
+    }
+}
+
+/// Attach `top_k` relevant sources to each `next_actions[*]` entry in a report-like JSON payload.
+///
+/// This is intentionally heuristic and inspectable:
+/// - score = Jaccard(tokenize(action_text), tokenize(source_text))
+/// - action_text uses: decl_name + excerpt + any embedded `query` strings from the research plan
+/// - source_text uses: url + title + snippet
+pub fn attach_research_matches_to_next_actions(
+    report_json: &mut serde_json::Value,
+    notes: &ResearchNotes,
+    top_k: usize,
+) {
+    let Some(actions) = report_json
+        .get_mut("next_actions")
+        .and_then(|v| v.as_array_mut())
+    else {
+        return;
+    };
+
+    for a in actions.iter_mut() {
+        let mut action_text = String::new();
+        if let Some(decl) = a.get("decl_name").and_then(|v| v.as_str()) {
+            action_text.push_str(decl);
+            action_text.push('\n');
+        }
+        if let Some(ex) = a.get("excerpt").and_then(|v| v.as_str()) {
+            action_text.push_str(ex);
+            action_text.push('\n');
+        }
+        // Walk research.plan.calls[*].arguments.query if present.
+        if let Some(calls) = a
+            .get("research")
+            .and_then(|v| v.get("plan"))
+            .and_then(|v| v.get("calls"))
+            .and_then(|v| v.as_array())
+        {
+            for c in calls {
+                if let Some(q) = c
+                    .get("arguments")
+                    .and_then(|v| v.get("query"))
+                    .and_then(|v| v.as_str())
+                {
+                    action_text.push_str(q);
+                    action_text.push('\n');
+                }
+            }
+        }
+
+        let action_tokens = tokenize(&action_text);
+
+        let mut scored: Vec<(usize, f32, &ResearchSource)> = notes
+            .sources
+            .iter()
+            .map(|s| {
+                let mut src_text = String::new();
+                src_text.push_str(&s.url);
+                src_text.push('\n');
+                if let Some(t) = &s.title {
+                    src_text.push_str(t);
+                    src_text.push('\n');
+                }
+                if let Some(sn) = &s.snippet {
+                    src_text.push_str(sn);
+                    src_text.push('\n');
+                }
+                let src_tokens = tokenize(&src_text);
+                let (inter, score) = overlap_and_jaccard(&action_tokens, &src_tokens);
+                (inter, score, s)
+            })
+            .collect();
+
+        scored.sort_by(|(ia, sa, a), (ib, sb, b)| {
+            ib.cmp(ia)
+                .then_with(|| sb.partial_cmp(sa).unwrap_or(std::cmp::Ordering::Equal))
+                .then_with(|| a.url.cmp(&b.url))
+        });
+
+        let matches: Vec<serde_json::Value> = scored
+            .into_iter()
+            // Require at least 2 non-trivial shared tokens to avoid pure-noise matches.
+            .filter(|(inter, _s, _)| *inter >= 2)
+            .take(top_k)
+            .map(|(inter, score, s)| {
+                serde_json::json!({
+                    "overlap": inter,
+                    "score": score,
+                    "url": s.url,
+                    "canonical_url": s.canonical_url,
+                    "title": s.title,
+                    "origin": s.origin,
+                })
+            })
+            .collect();
+
+        if let Some(obj) = a.as_object_mut() {
+            obj.insert("research_matches".to_string(), serde_json::Value::Array(matches));
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyResult {
     pub ok: bool,
