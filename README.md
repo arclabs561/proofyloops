@@ -12,7 +12,7 @@ This is not a full automated prover yet. The initial scope is:
 
 ## Provider configuration (opportunistic)
 
-The client will try providers in `PROOFYLOOPS_PROVIDER_ORDER` (default: `ollama,groq,openrouter`),
+The client will try providers in `PROOFYLOOPS_PROVIDER_ORDER` (default: `ollama,groq,openai,openrouter`),
 skipping providers whose required env vars are not set / not reachable.
 
 ### Ollama

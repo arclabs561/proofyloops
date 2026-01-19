@@ -15,6 +15,22 @@ import httpx
 from pydantic import BaseModel  # type: ignore[import-not-found]
 
 
+def redact_secrets(text: str) -> str:
+    """
+    Best-effort redaction of common secret patterns.
+
+    This is not a scanner. It's just a last-resort guard to reduce accidental leakage in review payloads.
+    """
+    # GitHub tokens
+    text = re.sub(r"\bghp_[A-Za-z0-9]{20,}\b", "ghp_REDACTED", text)
+    text = re.sub(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b", "github_pat_REDACTED", text)
+    # AWS access keys
+    text = re.sub(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b", "AWS_ACCESS_KEY_REDACTED", text)
+    # OpenAI-ish keys (very approximate; avoid overmatching short strings)
+    text = re.sub(r"\bsk-[A-Za-z0-9]{20,}\b", "sk-REDACTED", text)
+    return text
+
+
 def _parse_dotenv(path: Path) -> Dict[str, str]:
     out: Dict[str, str] = {}
     try:
@@ -168,7 +184,7 @@ def _provider_order() -> List[str]:
     if not raw:
         raw = os.environ.get("LEANPOT_PROVIDER_ORDER", "").strip()
     if not raw:
-        return ["ollama", "groq", "openrouter"]
+        return ["ollama", "groq", "openai", "openrouter"]
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
@@ -590,6 +606,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     r.add_argument("--max-file-bytes", type=int, default=12_000)
     r.add_argument("--max-total-bytes", type=int, default=320_000)
     r.add_argument(
+        "--prompt-only",
+        action="store_true",
+        help="Do not call an LLM; emit the bounded prompt JSON and exit 0.",
+    )
+    r.add_argument(
         "--require-key",
         action="store_true",
         help="Fail if no provider is configured (otherwise prints a skip message and exits 0).",
@@ -660,6 +681,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         if len(diff.encode("utf-8")) > int(args.max_diff_bytes):
             b = diff.encode("utf-8")[: int(args.max_diff_bytes)]
             diff = b.decode("utf-8", errors="replace") + "\n…(truncated)\n"
+        diff = redact_secrets(diff)
 
         changed = [ln.strip() for ln in _git(names_cmd).splitlines() if ln.strip()]
 
@@ -734,7 +756,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             s = b[:take].decode("utf-8", errors="replace")
             if take < len(b):
                 s += "\n…(truncated)\n"
-            excerpts.append({"path": rel, "bytes": take, "text": s})
+            excerpts.append({"path": rel, "bytes": take, "text": redact_secrets(s)})
 
         system = (
             "You are a skeptical code reviewer for a Lean/mathlib-focused repository.\n"
@@ -756,6 +778,24 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             },
             ensure_ascii=False,
         )
+
+        if args.prompt_only:
+            print(
+                json.dumps(
+                    {
+                        "repo_root": str(repo_root),
+                        "scope": args.scope,
+                        "changed_paths": changed,
+                        "diff": diff,
+                        "excerpts": excerpts,
+                        "system": system,
+                        "user": user,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return
 
         try:
             resp = chat_completion(system=system, user=user, timeout_s=90.0)
