@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+pp-lean-tools-build: build proofpatch's Lean helper package and print env exports.
+
+Usage:
+  pp-lean-tools-build
+
+Output:
+  Prints a single line:
+    export PROOFPATCH_EXTRA_LEAN_PATH="<abs path>"
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
+  usage
+  exit 0
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TOOLS="${ROOT}/lean-tools"
+if [[ ! -d "${TOOLS}" ]]; then
+  echo "missing lean-tools directory: ${TOOLS}" >&2
+  exit 2
+fi
+
+LAKE="${LAKE:-lake}"
+if ! command -v "${LAKE}" >/dev/null 2>&1; then
+  if [[ -x "${HOME}/.elan/bin/lake" ]]; then
+    LAKE="${HOME}/.elan/bin/lake"
+  fi
+fi
+if ! command -v "${LAKE}" >/dev/null 2>&1; then
+  echo "could not find lake (set LAKE=... or install elan)" >&2
+  exit 2
+fi
+
+cd "${TOOLS}"
+${LAKE} build 1>&2
+
+OUT="${TOOLS}/.lake/build/lib/lean"
+echo "export PROOFPATCH_EXTRA_LEAN_PATH=\"${OUT}\""
+

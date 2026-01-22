@@ -1,0 +1,28 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["cb38b0cadb87c004.olean"],
+  "i": "262e360e9369ffa3.ilean",
+  "c": "acc7063fc7dd1d5a.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/.lake/build/lib/lean /Users/arc/.elan/toolchains/leanprover--lean4---v4.26.0/bin/lean /Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/LeanEmbedDemo/FFI.lean -o /Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/.lake/build/lib/lean/LeanEmbedDemo/FFI.olean -i /Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/.lake/build/lib/lean/LeanEmbedDemo/FFI.ilean -c /Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/.lake/build/ir/LeanEmbedDemo/FFI.c --setup /Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/.lake/build/ir/LeanEmbedDemo/FFI.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["LeanEmbedDemo.FFI:deps",
+   [["deps",
+     [["proofpatch_lean_embed/LeanEmbedDemo:extraDep",
+       [["@proofpatch_lean_embed:extraDep", "00000000000006bb"]]],
+      ["imports", "00000000000006bb"]]],
+    ["libs",
+     [["import dynlibs", "00000000000006bb"],
+      ["package external libraries", "00000000000006bb"],
+      ["module dynlibs", "00000000000006bb"],
+      ["module plugins", "00000000000006bb"]]]]],
+  ["Lean 4.26.0, commit d8204c9fd894f91bbb2cdfec5912ec8196fd8562",
+   "9c9419104e9584f8"],
+  ["/Users/arc/Documents/dev/proofpatch/proofpatch-lean-embed/lean/LeanEmbedDemo/FFI.lean",
+   "7c0d3088970b6de2"],
+  ["options", "00000000000006bb"],
+  ["Module.leanArgs: #[]", "00000000000006bb"]],
+ "depHash": "9ecda20e7fa02061"}

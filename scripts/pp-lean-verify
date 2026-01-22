@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+pp-lean-verify: thin wrapper around `proofpatch verify-summary`.
+
+Usage:
+  pp-lean-verify --repo <lean_repo_root_or_any_parent> --file <relpath> [--timeout-s N] [--raw]
+
+Notes:
+- This script does not modify files.
+- If `jq` is available, output is pretty-printed; otherwise raw JSON is printed.
+EOF
+}
+
+REPO=""
+FILE=""
+TIMEOUT_S=""
+RAW=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo) REPO="${2:-}"; shift 2;;
+    --file) FILE="${2:-}"; shift 2;;
+    --timeout-s) TIMEOUT_S="${2:-}"; shift 2;;
+    --raw) RAW=1; shift 1;;
+    -h|--help|help) usage; exit 0;;
+    *) echo "unknown arg: $1" >&2; usage >&2; exit 2;;
+  esac
+done
+
+if [[ -z "${REPO}" || -z "${FILE}" ]]; then
+  echo "missing --repo and/or --file" >&2
+  usage >&2
+  exit 2
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROOFPATCH_BIN="${PROOFPATCH_BIN:-}"
+
+if [[ -z "${PROOFPATCH_BIN}" ]]; then
+  if [[ -x "${ROOT}/target/debug/proofpatch" ]]; then
+    PROOFPATCH_BIN="${ROOT}/target/debug/proofpatch"
+  else
+    PROOFPATCH_BIN="cargo run --quiet -p proofpatch-core --bin proofpatch --"
+  fi
+fi
+
+ARGS=(verify-summary --repo "${REPO}" --file "${FILE}")
+if [[ -n "${TIMEOUT_S}" ]]; then
+  ARGS+=(--timeout-s "${TIMEOUT_S}")
+fi
+if [[ "${RAW}" -eq 1 ]]; then
+  ARGS+=(--include-raw-verify)
+fi
+
+if command -v jq >/dev/null 2>&1; then
+  # shellcheck disable=SC2086
+  ${PROOFPATCH_BIN} "${ARGS[@]}" | jq .
+else
+  # shellcheck disable=SC2086
+  ${PROOFPATCH_BIN} "${ARGS[@]}"
+fi
+

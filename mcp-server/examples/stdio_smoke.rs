@@ -1,6 +1,6 @@
-//! Smoke test for `proofloops-mcp mcp-stdio`.
+//! Smoke test for `proofpatch-mcp mcp-stdio`.
 //!
-//! This starts a child process running `proofloops-mcp mcp-stdio` and calls a couple tools.
+//! This starts a child process running `proofpatch-mcp mcp-stdio` and calls a couple tools.
 //! It validates the stdio MCP surface without relying on Cursor as the client.
 
 #[cfg(not(feature = "stdio"))]
@@ -26,16 +26,16 @@ use tokio::process::Command;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // `CARGO_MANIFEST_DIR` here is `.../proofloops/mcp-server`.
+    // `CARGO_MANIFEST_DIR` here is `.../proofpatch/mcp-server`.
     // The binary is built into the *workspace* `target/` by default.
     let workspace_root = root
         .parent()
-        .expect("mcp-server should be nested under proofloops/")
+        .expect("mcp-server should be nested under proofpatch/")
         .to_path_buf();
-    let bin = workspace_root.join("target/debug/proofloops-mcp");
+    let bin = workspace_root.join("target/debug/proofpatch-mcp");
     if !bin.exists() {
         anyhow::bail!(
-            "missing server binary at {}\n\nBuild it with:\n  cargo build -p proofloops-mcp --bin proofloops-mcp --features stdio",
+            "missing server binary at {}\n\nBuild it with:\n  cargo build -p proofpatch-mcp --bin proofpatch-mcp --features stdio",
             bin.display()
         );
     }
@@ -43,12 +43,15 @@ async fn main() -> anyhow::Result<()> {
 
     // Make the smoke test independent of any particular repo layout.
     //
-    // Default to a known Lean repo inside this workspace if the env var isn't set.
-    // (This path is local developer convenience, not a public contract.)
-    let repo_root = std::env::var("PROOFLOOPS_SMOKE_REPO_ROOT")
-        .unwrap_or_else(|_| "/Users/arc/Documents/dev/geometry-of-numbers".to_string());
-    let file = std::env::var("PROOFLOOPS_SMOKE_FILE")
-        .unwrap_or_else(|_| "Covolume/Cauchy/Main.lean".to_string());
+    // This is a true smoke test of the stdio MCP surface. Require an explicit Lean repo root so
+    // we don't bake in developer-specific paths in a public repo.
+    let repo_root = std::env::var("PROOFPATCH_SMOKE_REPO_ROOT").map_err(|_| {
+        anyhow::anyhow!(
+            "PROOFPATCH_SMOKE_REPO_ROOT is required (set it to an absolute Lean repo path)"
+        )
+    })?;
+    let file = std::env::var("PROOFPATCH_SMOKE_FILE")
+        .unwrap_or_else(|_| "GeometryOfNumbers/Legendre/Main.lean".to_string());
 
     let service = ()
         .serve(TokioChildProcess::new(Command::new(&bin).configure(
@@ -67,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
     // Keep this cheap: triage one file with a small timeout.
     let triage = service
         .call_tool(CallToolRequestParam {
-            name: "proofloops_triage_file".into(),
+            name: "proofpatch_triage_file".into(),
             arguments: Some(
                 serde_json::json!({
                     "repo_root": repo_root.clone(),
@@ -82,11 +85,11 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofloops_triage_file: {:#?}", triage);
+    println!("proofpatch_triage_file: {:#?}", triage);
 
     let pack = service
         .call_tool(CallToolRequestParam {
-            name: "proofloops_context_pack".into(),
+            name: "proofpatch_context_pack".into(),
             arguments: Some(
                 serde_json::json!({
                     "repo_root": repo_root.clone(),
@@ -103,16 +106,16 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofloops_context_pack: {:#?}", pack);
+    println!("proofpatch_context_pack: {:#?}", pack);
 
     // Exercise the expanded stdio surface (typed schemas).
     let locate = service
         .call_tool(CallToolRequestParam {
-            name: "proofloops_locate_sorries".into(),
+            name: "proofpatch_locate_sorries".into(),
             arguments: Some(
                 serde_json::json!({
                     "repo_root": repo_root.clone(),
-                    "file": "Covolume/Legendre/Main.lean",
+                    "file": "GeometryOfNumbers/Legendre/Main.lean",
                     "max_results": 10,
                     "context_lines": 2
                 })
@@ -122,11 +125,11 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofloops_locate_sorries (Legendre/Main): {:#?}", locate);
+    println!("proofpatch_locate_sorries (Legendre/Main): {:#?}", locate);
 
     let rubberduck = service
         .call_tool(CallToolRequestParam {
-            name: "proofloops_rubberduck_prompt".into(),
+            name: "proofpatch_rubberduck_prompt".into(),
             arguments: Some(
                 serde_json::json!({
                     "repo_root": repo_root.clone(),
@@ -140,13 +143,13 @@ async fn main() -> anyhow::Result<()> {
         })
         .await?;
     println!(
-        "proofloops_rubberduck_prompt (Legendre/Main.sum_three_squares_of_not_exception): {:#?}",
+        "proofpatch_rubberduck_prompt (Legendre/Main.sum_three_squares_of_not_exception): {:#?}",
         rubberduck
     );
 
     let step = service
         .call_tool(CallToolRequestParam {
-            name: "proofloops_agent_step".into(),
+            name: "proofpatch_agent_step".into(),
             arguments: Some(
                 serde_json::json!({
                     "repo_root": repo_root.clone(),
@@ -160,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofloops_agent_step: {:#?}", step);
+    println!("proofpatch_agent_step: {:#?}", step);
 
     service.cancel().await?;
     Ok(())

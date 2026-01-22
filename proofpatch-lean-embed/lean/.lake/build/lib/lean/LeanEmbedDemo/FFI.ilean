@@ -1,0 +1,1 @@
+{"directImports":[],"module":"LeanEmbedDemo.FFI","references":{"{\"c\":{\"m\":\"Init.Prelude\",\"n\":\"UInt64\"}}":{"definition":null,"usages":[[4,18,4,24,"LeanEmbedDemo.addU64",3,0,5,7,4,4,4,10],[4,28,4,34,"LeanEmbedDemo.addU64",3,0,5,7,4,4,4,10]]},"{\"c\":{\"m\":\"LeanEmbedDemo.FFI\",\"n\":\"LeanEmbedDemo.addU64\"}}":{"definition":[4,4,4,10],"usages":[]}},"version":4}

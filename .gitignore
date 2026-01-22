@@ -1,9 +1,14 @@
 .venv/
 
-# Rust build artifacts (proofloops-core, mcp-server)
+# Rust build artifacts (proofpatch-core, mcp-server)
 target/
 **/target/
 
 # Local env
 .env
+
+# Local artifacts (public repo hygiene)
+tmp/
+.tmp/
+.generated/
 

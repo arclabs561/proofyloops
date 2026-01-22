@@ -1,0 +1,8 @@
+{"plugins": [],
+ "options": {},
+ "name": "ProofpatchTools",
+ "isModule": false,
+ "importArts":
+ {"ProofpatchTools.Tactics":
+  ["/Users/arc/Documents/dev/proofpatch/lean-tools/.lake/build/lib/lean/ProofpatchTools/Tactics.olean"]},
+ "dynlibs": []}

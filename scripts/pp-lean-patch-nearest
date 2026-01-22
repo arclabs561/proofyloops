@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+pp-lean-patch-nearest: patch the primary/nearest `sorry` in a file (no lemma/lines).
+
+Usage:
+  pp-lean-patch-nearest --repo <lean_repo_root_or_any_parent> --file <relpath> --replacement-file <path>
+    [--timeout-s N] [--max-sorries N] [--context-lines N] [--raw] [--apply]
+
+Safety:
+- Default is dry-run (no file writes).
+- With --apply, the script writes the patch to disk *transactionally*:
+  it saves a backup, runs `proofpatch patch-nearest --write`, and rolls back if verify fails.
+
+Notes:
+- Uses `proofpatch patch-nearest` under the hood.
+- If `jq` is available, emits pretty JSON.
+EOF
+}
+
+REPO=""
+FILE=""
+REPL_FILE=""
+TIMEOUT_S=""
+MAX_SORRIES=""
+CONTEXT_LINES=""
+RAW=0
+APPLY=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo) REPO="${2:-}"; shift 2;;
+    --file) FILE="${2:-}"; shift 2;;
+    --replacement-file) REPL_FILE="${2:-}"; shift 2;;
+    --timeout-s) TIMEOUT_S="${2:-}"; shift 2;;
+    --max-sorries) MAX_SORRIES="${2:-}"; shift 2;;
+    --context-lines) CONTEXT_LINES="${2:-}"; shift 2;;
+    --raw) RAW=1; shift 1;;
+    --apply) APPLY=1; shift 1;;
+    -h|--help|help) usage; exit 0;;
+    *) echo "unknown arg: $1" >&2; usage >&2; exit 2;;
+  esac
+done
+
+if [[ -z "${REPO}" || -z "${FILE}" || -z "${REPL_FILE}" ]]; then
+  echo "missing required args: --repo --file --replacement-file" >&2
+  usage >&2
+  exit 2
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROOFPATCH_BIN="${PROOFPATCH_BIN:-}"
+if [[ -z "${PROOFPATCH_BIN}" ]]; then
+  if [[ -x "${ROOT}/target/debug/proofpatch" ]]; then
+    PROOFPATCH_BIN="${ROOT}/target/debug/proofpatch"
+  else
+    PROOFPATCH_BIN="cargo run --quiet -p proofpatch-core --bin proofpatch --"
+  fi
+fi
+
+ARGS=(patch-nearest --repo "${REPO}" --file "${FILE}" --replacement-file "${REPL_FILE}")
+if [[ -n "${TIMEOUT_S}" ]]; then
+  ARGS+=(--timeout-s "${TIMEOUT_S}")
+fi
+if [[ -n "${MAX_SORRIES}" ]]; then
+  ARGS+=(--max-sorries "${MAX_SORRIES}")
+fi
+if [[ -n "${CONTEXT_LINES}" ]]; then
+  ARGS+=(--context-lines "${CONTEXT_LINES}")
+fi
+if [[ "${RAW}" -eq 1 ]]; then
+  ARGS+=(--include-raw-verify)
+fi
+
+if [[ "${APPLY}" -eq 0 ]]; then
+  # shellcheck disable=SC2086
+  OUT="$(${PROOFPATCH_BIN} "${ARGS[@]}")"
+  if command -v jq >/dev/null 2>&1; then
+    echo "${OUT}" | jq .
+  else
+    echo "${OUT}"
+  fi
+  exit 0
+fi
+
+# Transactional write path.
+# We resolve the absolute file path without baking any user-specific paths:
+# repo + relpath.
+ABS_FILE="${REPO%/}/${FILE}"
+if [[ ! -f "${ABS_FILE}" ]]; then
+  echo "file not found: ${ABS_FILE}" >&2
+  exit 2
+fi
+
+BACKUP="${ABS_FILE}.proofpatch.bak"
+cp "${ABS_FILE}" "${BACKUP}"
+
+set +e
+# shellcheck disable=SC2086
+OUT="$(${PROOFPATCH_BIN} "${ARGS[@]}" --write)"
+STATUS=$?
+set -e
+
+VERIFY_OK="false"
+if command -v jq >/dev/null 2>&1; then
+  VERIFY_OK="$(echo "${OUT}" | jq -r '.verify.summary.ok // false' 2>/dev/null || echo "false")"
+else
+  # best-effort fallback: look for `"ok":true` inside the verify summary
+  if echo "${OUT}" | rg -q '"verify"\s*:\s*\{\s*"summary"\s*:\s*\{[^}]*"ok"\s*:\s*true' ; then
+    VERIFY_OK="true"
+  fi
+fi
+
+if [[ "${STATUS}" -ne 0 || "${VERIFY_OK}" != "true" ]]; then
+  mv "${BACKUP}" "${ABS_FILE}"
+  echo "${OUT}"
+  echo "{\"rolled_back\":true,\"backup\":\"${BACKUP}\"}" 
+  exit 1
+fi
+
+rm -f "${BACKUP}"
+if command -v jq >/dev/null 2>&1; then
+  echo "${OUT}" | jq '. + {rolled_back: false}'
+else
+  echo "${OUT}"
+  echo "{\"rolled_back\":false}"
+fi
+

@@ -1,0 +1,31 @@
+{"synthetic": false,
+ "schemaVersion": "2025-09-10",
+ "outputs":
+ {"o": ["8103c8407c9eeb88.olean"],
+  "i": "03919ff573832858.ilean",
+  "c": "18b5575691412eae.c"},
+ "log":
+ [{"message":
+   ".> LEAN_PATH=/Users/arc/Documents/dev/proofpatch/lean-tools/.lake/build/lib/lean /Users/arc/.elan/toolchains/leanprover--lean4---v4.26.0/bin/lean /Users/arc/Documents/dev/proofpatch/lean-tools/ProofpatchTools.lean -o /Users/arc/Documents/dev/proofpatch/lean-tools/.lake/build/lib/lean/ProofpatchTools.olean -i /Users/arc/Documents/dev/proofpatch/lean-tools/.lake/build/lib/lean/ProofpatchTools.ilean -c /Users/arc/Documents/dev/proofpatch/lean-tools/.lake/build/ir/ProofpatchTools.c --setup /Users/arc/Documents/dev/proofpatch/lean-tools/.lake/build/ir/ProofpatchTools.setup.json --json",
+   "level": "trace"}],
+ "inputs":
+ [["ProofpatchTools:deps",
+   [["deps",
+     [["proofpatch_lean_tools/ProofpatchTools:extraDep",
+       [["@proofpatch_lean_tools:extraDep", "00000000000006bb"]]],
+      ["imports",
+       [["ProofpatchTools.Tactics transitive imports (legacy)",
+         "00000000000006bb"],
+        ["ProofpatchTools.Tactics:importAllArts", "cc184d054a79bafb"]]]]],
+    ["libs",
+     [["import dynlibs", "00000000000006bb"],
+      ["package external libraries", "00000000000006bb"],
+      ["module dynlibs", "00000000000006bb"],
+      ["module plugins", "00000000000006bb"]]]]],
+  ["Lean 4.26.0, commit d8204c9fd894f91bbb2cdfec5912ec8196fd8562",
+   "9c9419104e9584f8"],
+  ["/Users/arc/Documents/dev/proofpatch/lean-tools/ProofpatchTools.lean",
+   "a3649548e7301c7d"],
+  ["options", "00000000000006bb"],
+  ["Module.leanArgs: #[]", "00000000000006bb"]],
+ "depHash": "56ceae3694e44a4d"}

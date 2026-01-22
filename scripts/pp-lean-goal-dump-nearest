@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+pp-lean-goal-dump-nearest: produce a goal snapshot for the nearest `sorry` without editing the repo.
+
+How it works:
+- Builds proofpatch's Lean helper package (ProofpatchTools).
+- Runs `proofpatch triage-file` to select the primary `sorry` region.
+- Creates a temporary Lean file that:
+  - includes `import ProofpatchTools`
+  - replaces the selected `sorry` with:
+      by
+        pp_dump
+        sorry
+- Runs `lake env lean <tempfile>` so the `info:` log contains a JSON goal dump.
+
+Usage:
+  pp-lean-goal-dump-nearest --repo <lean_repo_root_or_any_parent> --file <relpath> [--timeout-s N]
+
+Notes:
+- Does NOT modify files in the target repo.
+- Requires `python3` and `lake` (via elan is fine).
+EOF
+}
+
+REPO=""
+FILE=""
+TIMEOUT_S="180"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo) REPO="${2:-}"; shift 2;;
+    --file) FILE="${2:-}"; shift 2;;
+    --timeout-s) TIMEOUT_S="${2:-}"; shift 2;;
+    -h|--help|help) usage; exit 0;;
+    *) echo "unknown arg: $1" >&2; usage >&2; exit 2;;
+  esac
+done
+
+if [[ -z "${REPO}" || -z "${FILE}" ]]; then
+  echo "missing --repo and/or --file" >&2
+  usage >&2
+  exit 2
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required" >&2
+  exit 2
+fi
+
+LAKE="${LAKE:-lake}"
+if ! command -v "${LAKE}" >/dev/null 2>&1; then
+  if [[ -x "${HOME}/.elan/bin/lake" ]]; then
+    LAKE="${HOME}/.elan/bin/lake"
+  fi
+fi
+if ! command -v "${LAKE}" >/dev/null 2>&1; then
+  echo "could not find lake (set LAKE=... or install elan)" >&2
+  exit 2
+fi
+
+# Run triage and parse selected region (start/end).
+TRIAGE_JSON="$("${ROOT}/scripts/pp-lean-triage" --repo "${REPO}" --file "${FILE}" --timeout-s "${TIMEOUT_S}")"
+export TRIAGE_JSON
+REGION_START="$(python3 - <<'PY'
+import json,os
+v=json.loads(os.environ.get("TRIAGE_JSON",""))
+na=v.get("next_action",{})
+reg=na.get("region") or {}
+print(int(reg.get("start_line",0)))
+PY
+)"
+REGION_END="$(python3 - <<'PY'
+import json,os
+v=json.loads(os.environ.get("TRIAGE_JSON",""))
+na=v.get("next_action",{})
+reg=na.get("region") or {}
+print(int(reg.get("end_line",0)))
+PY
+)"
+
+if [[ "${REGION_START}" -le 0 || "${REGION_END}" -le 0 || "${REGION_END}" -lt "${REGION_START}" ]]; then
+  echo "could not parse region from triage output (next_action.region)" >&2
+  echo "${TRIAGE_JSON}" >&2
+  exit 1
+fi
+
+ABS_FILE="${REPO%/}/${FILE}"
+if [[ ! -f "${ABS_FILE}" ]]; then
+  echo "file not found: ${ABS_FILE}" >&2
+  exit 2
+fi
+
+TMP="$(mktemp -t proofpatch-goal-dump.XXXXXX.lean)"
+export ABS_FILE REGION_START REGION_END TMP
+python3 - <<'PY'
+import io,sys,os,re
+
+abs_file = os.environ["ABS_FILE"]
+start_line = int(os.environ["REGION_START"])
+end_line = int(os.environ["REGION_END"])
+tmp_path = os.environ["TMP"]
+
+with open(abs_file, "r", encoding="utf-8") as f:
+  lines = f.read().splitlines(True)  # keep newlines
+
+PRELUDE = r'''
+open Lean Meta Elab Tactic
+
+namespace ProofpatchInline
+
+/-!
+`pp_dump` prints the current goals as a single JSON object (one line).
+This is intended for fast debugging loops:
+
+```lean
+by
+  pp_dump
+  sorry
+```
+-/
+elab "pp_dump" : tactic => do
+  let goals ← getGoals
+  let mut goalsJson : Array Json := #[]
+  for g in goals do
+    let fmt ← liftMetaM (Lean.Meta.ppGoal g)
+    goalsJson := goalsJson.push (Json.mkObj [("pretty", Json.str fmt.pretty)])
+  let out := Json.mkObj [
+    ("tool", Json.str "proofpatch"),
+    ("kind", Json.str "pp_dump"),
+    ("goals", Json.arr goalsJson)
+  ]
+  logInfo m!"{toString out}"
+
+end ProofpatchInline
+
+'''
+
+out = list(lines)
+
+# Patch first sorry/admit in region (line-based, 1-indexed).
+pat = re.compile(r"\b(sorry|admit)\b")
+idx = None
+for i in range(start_line-1, min(end_line, len(out))):
+  ln = out[i]
+  if ln.lstrip().startswith("--"):
+    continue
+  if pat.search(ln):
+    idx = i
+    break
+
+if idx is None:
+  raise SystemExit(f"Could not find sorry/admit in region {start_line}..={end_line}")
+
+ln = out[idx]
+m = pat.search(ln)
+prefix = ln[:m.start()]
+suffix = ln[m.end():]
+indent = re.match(r"^\s*", ln).group(0)
+replacement = [
+  f"{prefix}by\n",
+  f"{indent}  pp_dump\n",
+  f"{indent}  sorry{suffix}",
+]
+out[idx:idx+1] = replacement
+
+# Insert helper tactic code after the last `import` line (imports must be at file start).
+insert_at = 0
+for i, ln in enumerate(out[:200]):
+  if re.match(r"^\s*import\b", ln):
+    insert_at = i + 1
+out.insert(insert_at, PRELUDE + "\n")
+
+with open(tmp_path, "w", encoding="utf-8") as f:
+  f.write("".join(out))
+PY
+
+echo "{\"tmp_file\":\"${TMP}\",\"region\":{\"start_line\":${REGION_START},\"end_line\":${REGION_END}}}"
+
+# Run Lean on the temp file (no repo modifications).
+(
+  cd "${REPO}"
+  "${LAKE}" env lean "${TMP}"
+)
+

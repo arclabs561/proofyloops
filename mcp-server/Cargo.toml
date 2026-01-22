@@ -1,11 +1,15 @@
 [package]
-name = "proofloops-mcp"
+name = "proofpatch-mcp"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
-description = "HTTP MCP server wrapper for proofloops (axum-mcp)"
+description = "MCP server wrapper for proofpatch (axum-mcp)"
 license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "proofpatch-mcp"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
@@ -16,7 +20,7 @@ serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
-proofloops-core = { path = "../proofloops-core" }
+proofpatch-core = { path = "../proofpatch-core" }
 rmcp = { version = "0.12.0", optional = true, features = ["macros", "server", "client", "transport-io", "transport-child-process", "schemars"] }
 schemars = { version = "1.2.0", optional = true, features = ["derive"] }
 

@@ -1,0 +1,40 @@
+[package]
+name = "proofpatch-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+description = "Rust core for proofpatch (Lean excerpt/patch/verify + prompt construction)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.10"
+tokio = { version = "1", features = ["process", "time", "rt-multi-thread", "macros"] }
+dirs = "5.0"
+reqwest = { version = "0.13.1", features = ["json", "webpki-roots", "stream"] }
+sha2 = "0.10.9"
+hex = "0.4.3"
+axi = { path = "../../axi/crates/axi" }
+axi-providers = { path = "../../axi/crates/axi-providers" }
+schemars = { version = "1.2.0", features = ["derive"] }
+proofpatch-lean-embed = { path = "../proofpatch-lean-embed", optional = true }
+similar = "2"
+durability = { path = "../../durability" }
+lsp-types = { version = "0.97.0", optional = true }
+url = { version = "2.5.4", optional = true }
+smtkit = { path = "../../smtkit", optional = true }
+
+[[bin]]
+name = "proofpatch"
+path = "src/bin/proofpatch.rs"
+
+[features]
+default = []
+lean-embed = ["dep:proofpatch-lean-embed", "proofpatch-lean-embed/enabled"]
+lsp = ["dep:lsp-types", "dep:url"]
+planner = []
+smt = ["dep:smtkit"]
+

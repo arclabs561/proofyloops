@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+pp-lean-triage: wrapper around `proofpatch triage-file` with stable artifact output.
+
+Usage:
+  pp-lean-triage --repo <lean_repo_root_or_any_parent> --file <relpath> [--timeout-s N] [--raw]
+
+Behavior:
+- Writes the full JSON to: <proofpatch_repo>/.generated/triage/<sanitized-file>.json
+- Prints a small JSON summary to stdout (and includes the artifact path).
+EOF
+}
+
+REPO=""
+FILE=""
+TIMEOUT_S=""
+RAW=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo) REPO="${2:-}"; shift 2;;
+    --file) FILE="${2:-}"; shift 2;;
+    --timeout-s) TIMEOUT_S="${2:-}"; shift 2;;
+    --raw) RAW=1; shift 1;;
+    -h|--help|help) usage; exit 0;;
+    *) echo "unknown arg: $1" >&2; usage >&2; exit 2;;
+  esac
+done
+
+if [[ -z "${REPO}" || -z "${FILE}" ]]; then
+  echo "missing --repo and/or --file" >&2
+  usage >&2
+  exit 2
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT_DIR="${ROOT}/.generated/triage"
+mkdir -p "${OUT_DIR}"
+
+# sanitize path into a filename
+SAFE_FILE="${FILE//\//__}"
+SAFE_FILE="${SAFE_FILE// /_}"
+OUT_PATH="${OUT_DIR}/${SAFE_FILE}.json"
+
+PROOFPATCH_BIN="${PROOFPATCH_BIN:-}"
+if [[ -z "${PROOFPATCH_BIN}" ]]; then
+  if [[ -x "${ROOT}/target/debug/proofpatch" ]]; then
+    PROOFPATCH_BIN="${ROOT}/target/debug/proofpatch"
+  else
+    PROOFPATCH_BIN="cargo run --quiet -p proofpatch-core --bin proofpatch --"
+  fi
+fi
+
+ARGS=(triage-file --repo "${REPO}" --file "${FILE}" --output-json "${OUT_PATH}")
+if [[ -n "${TIMEOUT_S}" ]]; then
+  ARGS+=(--timeout-s "${TIMEOUT_S}")
+fi
+if [[ "${RAW}" -eq 1 ]]; then
+  ARGS+=(--include-raw-verify)
+fi
+
+# shellcheck disable=SC2086
+SMALL="$(${PROOFPATCH_BIN} "${ARGS[@]}")"
+
+if command -v jq >/dev/null 2>&1; then
+  echo "${SMALL}" | jq --arg out_path "${OUT_PATH}" '. + {artifact: {path: $out_path}}'
+else
+  # minimal augmentation without jq: print the tool output (already small) and rely on out_path known convention
+  echo "${SMALL}"
+  echo "{\"artifact\":{\"path\":\"${OUT_PATH}\"}}"
+fi
+

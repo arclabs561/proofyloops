@@ -1,0 +1,5 @@
+{"version": "1.1.0",
+ "packagesDir": ".lake/packages",
+ "packages": [],
+ "name": "proofpatch_lean_embed",
+ "lakeDir": ".lake"}

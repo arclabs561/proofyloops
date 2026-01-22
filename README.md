@@ -1,8 +1,19 @@
-## proofloops
+## proofpatch
 
 Rust helpers for working in Lean 4 repos: verify, locate `sorry`s, build bounded prompt packs, and optionally call an OpenAI-compatible LLM.
 
 This repo is **Rust-only**.
+
+### Target-agnostic by design
+
+`proofpatch` is intended to work with **any Lean 4 project**:
+
+- you pass a Lean repo root via `--repo /abs/path/to/lean-repo`
+- you target a file/lemma/region inside that repo
+- you get bounded, structured JSON back (plus optional HTML artifacts for humans)
+
+Any repo-specific wiring (e.g. a `./Scripts/check.sh` in some project) is an **integration example**,
+not something `proofpatch` depends on.
 
 ### What it does
 
@@ -17,62 +28,70 @@ This repo is **Rust-only**.
 From the repo root:
 
 ```bash
-cargo run --quiet -p proofloops-core --bin proofloops -- --help
+cargo run --quiet -p proofpatch-core --bin proofpatch -- --help
 ```
 
 Common commands (all output JSON):
 
 ```bash
 # Verify + sorry scan (no LLM)
-cargo run --quiet -p proofloops-core --bin proofloops -- triage-file \
+cargo run --quiet -p proofpatch-core --bin proofpatch -- triage-file \
   --repo /abs/path/to/lean-repo \
   --file Some/File.lean
 
 # Build a bounded context pack around a declaration (no LLM)
-cargo run --quiet -p proofloops-core --bin proofloops -- context-pack \
+cargo run --quiet -p proofpatch-core --bin proofpatch -- context-pack \
   --repo /abs/path/to/lean-repo \
   --file Some/File.lean \
   --decl some_theorem
 
 # Suggest a proof for a lemma (LLM call)
-cargo run --quiet -p proofloops-core --bin proofloops -- suggest \
+cargo run --quiet -p proofpatch-core --bin proofpatch -- suggest \
   --repo /abs/path/to/lean-repo \
   --file Some/File.lean \
   --lemma some_theorem
 
 # Patch first `sorry` in the lemma using a file and verify (in-memory; does not write)
-cargo run --quiet -p proofloops-core --bin proofloops -- patch \
+cargo run --quiet -p proofpatch-core --bin proofpatch -- patch \
   --repo /abs/path/to/lean-repo \
   --file Some/File.lean \
   --lemma some_theorem \
   --replacement-file /tmp/replacement.lean
 ```
 
+### Review-diff (LLM) prompt bounding
+
+`review-diff` supports explicit size caps:
+
+- `--max-total-bytes N` (overall prompt budget)
+- `--per-file-bytes N` (cap per selected file excerpt)
+- `--transcript-bytes N` (cap optional transcript tail; default is off)
+
 ### Environment (LLM routing)
 
-Prefer `PROOFLOOPS_*` env vars. Legacy `PROOFYLOOPS_*` are accepted in most places.
+Prefer `PROOFPATCH_*` env vars.
 
-- **Provider order**: `PROOFLOOPS_PROVIDER_ORDER` (default `ollama,groq,openai,openrouter`)
+- **Provider order**: `PROOFPATCH_PROVIDER_ORDER` (default `ollama,groq,openai,openrouter`)
 - **Ollama**: `OLLAMA_MODEL` (+ optional `OLLAMA_HOST`)
 - **Groq**: `GROQ_API_KEY`, `GROQ_MODEL`
 - **OpenAI**: `OPENAI_API_KEY`, `OPENAI_MODEL` (+ optional `OPENAI_BASE_URL`)
 - **OpenRouter**: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` (+ optional `OPENROUTER_BASE_URL`)
 
 Verification behavior:
-- **Auto-build**: `PROOFLOOPS_AUTO_BUILD=0` disables the “missing olean → lake build → retry” fallback (legacy: `PROOFYLOOPS_AUTO_BUILD`).
+- **Auto-build**: `PROOFPATCH_AUTO_BUILD=0` disables the “missing olean → lake build → retry” fallback.
 
 Environment loading (super-workspace convenience):
 - reads `<repo_root>/.env` if present (does not override already-set vars)
 - optionally searches one directory deep for a sibling `.env` if no API key is set yet  
-  controls: `PROOFLOOPS_DOTENV_SEARCH=0`, `PROOFLOOPS_DOTENV_SEARCH_ROOT=/abs/path` (legacy `PROOFYLOOPS_*`)
+  controls: `PROOFPATCH_DOTENV_SEARCH=0`, `PROOFPATCH_DOTENV_SEARCH_ROOT=/abs/path`
 
 ### MCP server
 
 ```bash
-cargo run --quiet -p proofloops-mcp --bin proofloops-mcp
+cargo run --quiet -p proofpatch-mcp --bin proofpatch-mcp
 ```
 
 Defaults:
-- `PROOFLOOPS_MCP_ADDR=127.0.0.1:8087` (legacy: `PROOFYLOOPS_MCP_ADDR`)
-- `PROOFLOOPS_MCP_TOOL_TIMEOUT_S=180` (legacy: `PROOFYLOOPS_MCP_TOOL_TIMEOUT_S`)
+- `PROOFPATCH_MCP_ADDR=127.0.0.1:8087`
+- `PROOFPATCH_MCP_TOOL_TIMEOUT_S=180`
 
