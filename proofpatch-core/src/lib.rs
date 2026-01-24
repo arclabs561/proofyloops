@@ -31,6 +31,7 @@ use std::time::Duration;
 use tokio::process::Command;
 
 pub mod json_extract;
+pub mod arxiv;
 pub mod llm;
 #[cfg(feature = "lsp")]
 mod lsp_client;
@@ -1679,9 +1680,9 @@ pub fn build_rubberduck_prompt(
     user.push_str("\nDeclaration excerpt:\n\n");
     user.push_str(&excerpt);
 
-    // Research hooks for agents (Cursor can execute these via MCP).
+    // Research hooks (optional).
     //
-    // Note: we keep these as *suggestions*; proofpatch itself does not talk to MCP servers.
+    // Note: these are *suggestions* embedded into the prompt. They are not executed by proofpatch.
     let q = if decl.contains("nathanson") || decl.contains("polygonal") {
         "Fermat polygonal number theorem Nathanson proof b^2 < 4a 3a < b^2 + 2b + 4 Cauchy lemma"
     } else if decl.contains("cauchy_lemma") {
@@ -1693,28 +1694,18 @@ pub fn build_rubberduck_prompt(
     };
     let web_q = format!("{q} mathlib Lean");
     user.push_str("\n\nResearch (optional):\n");
-    user.push_str("- MCP research plan (multi-source):\n");
-    // Use JSON so strings are correctly escaped (quotes, backslashes, etc.).
-    // Match the CallMcpTool schema: server + toolName + arguments.
+    user.push_str("- Suggested research plan (machine-readable JSON):\n");
+    // Keep this as JSON so it can be copy/pasted into an agent runner or a script safely.
     let plan = serde_json::json!({
         "goal": "Collect a reliable statement and a Lean mapping plan.",
-        "calls": [
+        "steps": [
             {
-                "server": "user-arxiv-semantic-search-mcp",
-                "toolName": "search_papers",
-                "arguments": { "query": q },
+                "tool": "proofpatch arxiv-search",
+                "args": { "query": q, "max_results": 8, "llm_summary": true }
             },
             {
-                "server": "user-tavily-remote-mcp",
-                "toolName": "tavily_search",
-                "arguments": { "query": web_q, "search_depth": "advanced", "max_results": 5 },
-            },
-            {
-                "server": "user-perplexity",
-                "toolName": "search",
-                "arguments": {
-                    "query": format!("Summarize the key lemma/step for: {q}. Extract variable definitions and constraints, and mention standard references."),
-                },
+                "tool": "web_search",
+                "args": { "query": web_q, "max_results": 5 }
             }
         ],
         "extract": {
@@ -1804,31 +1795,18 @@ pub fn build_rubberduck_prompt_from_excerpt(
     user.push_str("\nFocused excerpt:\n\n");
     user.push_str(excerpt);
 
-    // Research hooks for agents (Cursor can execute these via MCP).
+    // Research hooks (optional).
+    //
+    // Note: these are suggestions embedded into the prompt; proofpatch does not execute them.
     let q = focus_label;
     let web_q = format!("{q} mathlib Lean");
     user.push_str("\n\nResearch (optional):\n");
-    user.push_str("- MCP research plan (multi-source):\n");
+    user.push_str("- Suggested research plan (machine-readable JSON):\n");
     let plan = serde_json::json!({
         "goal": "Collect a reliable statement and a Lean mapping plan.",
-        "calls": [
-            {
-                "server": "user-arxiv-semantic-search-mcp",
-                "toolName": "search_papers",
-                "arguments": { "query": q },
-            },
-            {
-                "server": "user-tavily-remote-mcp",
-                "toolName": "tavily_search",
-                "arguments": { "query": web_q, "search_depth": "advanced", "max_results": 5 },
-            },
-            {
-                "server": "user-perplexity",
-                "toolName": "search",
-                "arguments": {
-                    "query": format!("Summarize the key lemma/step for: {q}. Extract variable definitions and constraints, and mention standard references."),
-                },
-            }
+        "steps": [
+            { "tool": "proofpatch arxiv-search", "args": { "query": q, "max_results": 8, "llm_summary": true } },
+            { "tool": "web_search", "args": { "query": web_q, "max_results": 5 } }
         ],
         "extract": {
             "schema": {
