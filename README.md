@@ -1,5 +1,7 @@
 ## proofpatch
 
+[![CI](https://github.com/arclabs561/proofpatch/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/proofpatch/actions/workflows/ci.yml)
+
 Rust helpers for working in Lean 4 repos: verify, locate `sorry`s, build bounded prompt packs, and optionally call an OpenAI-compatible LLM.
 
 This repo is **Rust-only**.
