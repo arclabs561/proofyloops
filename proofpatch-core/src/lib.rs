@@ -1187,7 +1187,10 @@ enum LeanCtxFrame<'a> {
     Section(Option<&'a str>),
 }
 
-fn collect_shadow_context_prefix<'a>(lines: &[&'a str], decl_start0: usize) -> (Vec<String>, Vec<String>) {
+fn collect_shadow_context_prefix<'a>(
+    lines: &[&'a str],
+    decl_start0: usize,
+) -> (Vec<String>, Vec<String>) {
     // Goal: replay lightweight context that affects elaboration of a decl header (common in mathlib):
     // - `section`/`namespace` blocks
     // - `variable(s)` binders that are implicit params in decls
@@ -1235,7 +1238,10 @@ fn collect_shadow_context_prefix<'a>(lines: &[&'a str], decl_start0: usize) -> (
             continue;
         }
 
-        if let (Some(re), Some(caps)) = (namespace_re.as_ref(), namespace_re.as_ref().and_then(|re| re.captures(t))) {
+        if let (Some(re), Some(caps)) = (
+            namespace_re.as_ref(),
+            namespace_re.as_ref().and_then(|re| re.captures(t)),
+        ) {
             // (The `re` binding avoids clippy complaining about repeated lookups.)
             let _ = re; // silence unused in older rustc/clippy combos
             if let Some(ns) = caps.get(1).map(|m| m.as_str()) {
@@ -1266,10 +1272,7 @@ fn collect_shadow_context_prefix<'a>(lines: &[&'a str], decl_start0: usize) -> (
             }
         }
 
-        let keep = keep_re
-            .as_ref()
-            .map(|re| re.is_match(t))
-            .unwrap_or(false);
+        let keep = keep_re.as_ref().map(|re| re.is_match(t)).unwrap_or(false);
         if keep {
             replay.push(t.to_string());
         }
@@ -1544,7 +1547,10 @@ end
 "#;
         let out = synthesize_pp_dump_shadow_decl_from_text("Foo/Bar.lean", "bar", txt)
             .expect("synthesize should succeed");
-        assert!(out.contains("section"), "expected section in shadow context");
+        assert!(
+            out.contains("section"),
+            "expected section in shadow context"
+        );
         assert!(
             out.contains("variable (α : Type) [Group α]"),
             "expected section variables replayed"
@@ -1553,10 +1559,7 @@ end
             out.contains("open scoped BigOperators"),
             "expected `open scoped` replayed"
         );
-        assert!(
-            out.contains("namespace Foo"),
-            "expected namespace replayed"
-        );
+        assert!(out.contains("namespace Foo"), "expected namespace replayed");
         assert!(
             out.contains("theorem bar_proofpatch_shadow"),
             "expected shadow decl name"
@@ -2536,10 +2539,7 @@ pub fn nearest_decl_header_in_text(
     loop {
         let ln = lines[i0];
         let t = ln.trim_start();
-        if !t.is_empty()
-            && !t.starts_with("--")
-            && !in_block[i0]
-            && decl_pat.captures(ln).is_some()
+        if !t.is_empty() && !t.starts_with("--") && !in_block[i0] && decl_pat.captures(ln).is_some()
         {
             let cap = decl_pat.captures(ln)?;
             let kind = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_string();

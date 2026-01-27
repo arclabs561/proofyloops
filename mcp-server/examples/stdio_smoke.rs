@@ -67,17 +67,23 @@ async fn main() -> anyhow::Result<()> {
     let tools = service.list_tools(Default::default()).await?;
     println!("tools: {:#?}", tools);
 
+    // Default toolset is "minimal": it exposes a single `proofpatch` tool that dispatches on
+    // `{ action, arguments }`. Keep the smoke test compatible with both minimal and full toolsets.
+    //
     // Keep this cheap: triage one file with a small timeout.
     let triage = service
         .call_tool(CallToolRequestParam {
-            name: "proofpatch_triage_file".into(),
+            name: "proofpatch".into(),
             arguments: Some(
                 serde_json::json!({
-                    "repo_root": repo_root.clone(),
-                    "file": file.clone(),
-                    "timeout_s": 120,
-                    "max_sorries": 3,
-                    "context_lines": 1
+                    "action": "triage_file",
+                    "arguments": {
+                        "repo_root": repo_root.clone(),
+                        "file": file.clone(),
+                        "timeout_s": 120,
+                        "max_sorries": 3,
+                        "context_lines": 1
+                    }
                 })
                 .as_object()
                 .cloned()
@@ -85,20 +91,24 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofpatch_triage_file: {:#?}", triage);
+    println!("proofpatch (triage_file): {:#?}", triage);
 
     let pack = service
         .call_tool(CallToolRequestParam {
-            name: "proofpatch_context_pack".into(),
+            name: "proofpatch".into(),
             arguments: Some(
                 serde_json::json!({
-                    "repo_root": repo_root.clone(),
-                    "file": file.clone(),
-                    "decl": "cauchy_decomposition",
-                    "context_lines": 20,
-                    "nearby_lines": 60,
-                    "max_nearby_decls": 20,
-                    "max_imports": 20
+                    "action": "context_pack",
+                    "arguments": {
+                        "repo_root": repo_root.clone(),
+                        "file": file.clone(),
+                        // Fixture decl name (keep this independent of any external repo).
+                        "decl": "one_plus_one_eq_two",
+                        "context_lines": 20,
+                        "nearby_lines": 60,
+                        "max_nearby_decls": 20,
+                        "max_imports": 20
+                    }
                 })
                 .as_object()
                 .cloned()
@@ -106,18 +116,21 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofpatch_context_pack: {:#?}", pack);
+    println!("proofpatch (context_pack): {:#?}", pack);
 
-    // Exercise the expanded stdio surface (typed schemas).
+    // Exercise another action: locate sorries (fixture should usually be sorry-free).
     let locate = service
         .call_tool(CallToolRequestParam {
-            name: "proofpatch_locate_sorries".into(),
+            name: "proofpatch".into(),
             arguments: Some(
                 serde_json::json!({
-                    "repo_root": repo_root.clone(),
-                    "file": "GeometryOfNumbers/Legendre/Main.lean",
-                    "max_results": 10,
-                    "context_lines": 2
+                    "action": "locate_sorries",
+                    "arguments": {
+                        "repo_root": repo_root.clone(),
+                        "file": file.clone(),
+                        "max_results": 10,
+                        "context_lines": 2
+                    }
                 })
                 .as_object()
                 .cloned()
@@ -125,45 +138,7 @@ async fn main() -> anyhow::Result<()> {
             ),
         })
         .await?;
-    println!("proofpatch_locate_sorries (Legendre/Main): {:#?}", locate);
-
-    let rubberduck = service
-        .call_tool(CallToolRequestParam {
-            name: "proofpatch_rubberduck_prompt".into(),
-            arguments: Some(
-                serde_json::json!({
-                    "repo_root": repo_root.clone(),
-                    "file": "Covolume/Legendre/Main.lean",
-                    "lemma": "sum_three_squares_of_not_exception"
-                })
-                .as_object()
-                .cloned()
-                .unwrap_or_default(),
-            ),
-        })
-        .await?;
-    println!(
-        "proofpatch_rubberduck_prompt (Legendre/Main.sum_three_squares_of_not_exception): {:#?}",
-        rubberduck
-    );
-
-    let step = service
-        .call_tool(CallToolRequestParam {
-            name: "proofpatch_agent_step".into(),
-            arguments: Some(
-                serde_json::json!({
-                    "repo_root": repo_root.clone(),
-                    "file": file.clone(),
-                    "timeout_s": 120,
-                    "write": false
-                })
-                .as_object()
-                .cloned()
-                .unwrap_or_default(),
-            ),
-        })
-        .await?;
-    println!("proofpatch_agent_step: {:#?}", step);
+    println!("proofpatch (locate_sorries): {:#?}", locate);
 
     service.cancel().await?;
     Ok(())

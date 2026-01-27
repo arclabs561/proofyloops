@@ -1867,7 +1867,10 @@ pub fn smt2_script_from_pp_dump(
     script.set_logic("QF_LIA");
 
     for name in used_vars.iter() {
-        script.declare_const(&smtkit::smt2::Var::new(name.clone(), smtkit::smt2::Sort::Int));
+        script.declare_const(&smtkit::smt2::Var::new(
+            name.clone(),
+            smtkit::smt2::Sort::Int,
+        ));
         let kind = *var_kinds.get(name).unwrap_or(&VarKind::Int);
         if kind == VarKind::Nat {
             script.assert(t::ge(t::sym(name.clone()), t::int_lit(0)));
