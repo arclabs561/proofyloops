@@ -2062,6 +2062,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "smtkit"
 version = "0.1.0"
+source = "git+https://github.com/arclabs561/smtkit?rev=e030ed1159293a74ac55a3cb592db6cb6c32d7b9#e030ed1159293a74ac55a3cb592db6cb6c32d7b9"
 dependencies = [
  "anyhow",
  "smtkit-core",
@@ -2072,6 +2073,7 @@ dependencies = [
 [[package]]
 name = "smtkit-core"
 version = "0.1.0"
+source = "git+https://github.com/arclabs561/smtkit?rev=e030ed1159293a74ac55a3cb592db6cb6c32d7b9#e030ed1159293a74ac55a3cb592db6cb6c32d7b9"
 dependencies = [
  "thiserror 2.0.18",
 ]
@@ -2079,6 +2081,7 @@ dependencies = [
 [[package]]
 name = "smtkit-smtlib"
 version = "0.1.0"
+source = "git+https://github.com/arclabs561/smtkit?rev=e030ed1159293a74ac55a3cb592db6cb6c32d7b9#e030ed1159293a74ac55a3cb592db6cb6c32d7b9"
 dependencies = [
  "shell-words",
  "smtkit-core",
