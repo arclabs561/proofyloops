@@ -15,7 +15,7 @@
  tokio = { version = "1", features = ["process", "time", "rt-multi-thread", "macros"] }
  similar = "2"
  schemars = { version = "1.2.0", features = ["derive"] }
-smtkit = { git = "https://github.com/arclabs561/smtkit", rev = "e030ed1159293a74ac55a3cb592db6cb6c32d7b9" }
+smtkit = "0.1.0"
 sha2 = "0.10"
  
  [features]

@@ -23,7 +23,7 @@ proofpatch-lean-embed = { path = "../proofpatch-lean-embed", optional = true }
 similar = "2"
 lsp-types = { version = "0.97.0", optional = true }
 url = { version = "2.5.4", optional = true }
-smtkit = { git = "https://github.com/arclabs561/smtkit", rev = "e030ed1159293a74ac55a3cb592db6cb6c32d7b9" }
+smtkit = "0.1.0"
 
 [features]
 # Keep defaults minimal; SMT is always available in the CLI.

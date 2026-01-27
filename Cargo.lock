@@ -2062,7 +2062,8 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "smtkit"
 version = "0.1.0"
-source = "git+https://github.com/arclabs561/smtkit?rev=e030ed1159293a74ac55a3cb592db6cb6c32d7b9#e030ed1159293a74ac55a3cb592db6cb6c32d7b9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe7b15577b1885f9f00cbbbd35738c097782964104644cc0ae81a8e18e5ba8a"
 dependencies = [
  "anyhow",
  "smtkit-core",
@@ -2073,7 +2074,8 @@ dependencies = [
 [[package]]
 name = "smtkit-core"
 version = "0.1.0"
-source = "git+https://github.com/arclabs561/smtkit?rev=e030ed1159293a74ac55a3cb592db6cb6c32d7b9#e030ed1159293a74ac55a3cb592db6cb6c32d7b9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "601613db770b0a8668470c1fbf3c498a0a1df8e3e45f8f9d3f301cd555c79a73"
 dependencies = [
  "thiserror 2.0.18",
 ]
@@ -2081,7 +2083,8 @@ dependencies = [
 [[package]]
 name = "smtkit-smtlib"
 version = "0.1.0"
-source = "git+https://github.com/arclabs561/smtkit?rev=e030ed1159293a74ac55a3cb592db6cb6c32d7b9#e030ed1159293a74ac55a3cb592db6cb6c32d7b9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf102990a8928c575a29be9e85e0755e46c3357e317b9adb4f386383cc37075a"
 dependencies = [
  "shell-words",
  "smtkit-core",
