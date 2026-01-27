@@ -41,6 +41,12 @@ When SMT is enabled, `tree-search-nearest` records enough evidence to debug and 
   - `oracle.smt.dump_paths` points at `.smt2` scripts written to disk (when `--smt-dump` is set).
   - `oracle.smt.dump_last.preview` includes a bounded inline preview of the last emitted script.
 
+### Dependency pinning (recommended)
+
+- `proofpatch` treats SMT as an *optional oracle* via `smtkit`.
+- For reproducibility, prefer the published crates (`smtkit = "0.x.y"`) and commit `Cargo.lock` (this repo does).
+- For testing unreleased `smtkit` changes, temporarily pin a git tag/rev, then revert to crates.io on release.
+
 If you want to capture an UNSAT proof object (solver-dependent), enable:
 
 ```bash
