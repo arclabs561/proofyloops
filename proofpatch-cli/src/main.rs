@@ -1159,6 +1159,26 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    // Aliases / grouping:
+    // - `proofpatch smt probe` == `proofpatch smt-probe`
+    // - `proofpatch smt repro` == `proofpatch smt-repro`
+    let (cmd, rest): (&str, &[String]) = if cmd == "smt" {
+        let sub = rest.get(0).map(|s| s.as_str()).unwrap_or("");
+        let tail: &[String] = if rest.len() > 1 { &rest[1..] } else { &[] };
+        match sub {
+            "probe" => ("smt-probe", tail),
+            "repro" => ("smt-repro", tail),
+            _ => {
+                return Err(format!(
+                    "{}\n\nsmt subcommands:\n  smt probe\n  smt repro\n",
+                    usage()
+                ));
+            }
+        }
+    } else {
+        (cmd, rest)
+    };
+
     match cmd {
         "smt-probe" => {
             let output_json = arg_value(rest, "--output-json").map(PathBuf::from);
