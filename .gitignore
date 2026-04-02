@@ -21,3 +21,5 @@ tmp/
 # Scratch demo directory (keep local by default)
 lean-rust-embed-demo/
 
+target-install-cli/
+target-proofpatch/
