@@ -13,21 +13,21 @@ help:
     @echo "  just mcp-stdio      # run MCP server in stdio mode"
     @echo ""
     @echo "Tip: install a fast local binary:"
-    @echo "  cargo build -p proofpatch-core --bin proofpatch --release"
+    @echo "  cargo build -p proofpatch --bin proofpatch --release"
 
 test:
     cargo test -q
 
 build:
-    cargo build -q -p proofpatch-core --bin proofpatch
+    cargo build -q -p proofpatch --bin proofpatch
     cargo build -q -p proofpatch-mcp --bin proofpatch-mcp
 
 build-release:
-    cargo build -q -p proofpatch-core --bin proofpatch --release
+    cargo build -q -p proofpatch --bin proofpatch --release
     cargo build -q -p proofpatch-mcp --bin proofpatch-mcp --release
 
 cli-help:
-    cargo run -q -p proofpatch-core --bin proofpatch -- --help
+    cargo run -q -p proofpatch --bin proofpatch -- --help
 
 mcp-help:
     cargo run -q -p proofpatch-mcp --bin proofpatch-mcp -- --help

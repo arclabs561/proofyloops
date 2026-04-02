@@ -2,9 +2,12 @@
 name = "proofpatch-lean-embed"
 version = "0.1.0"
 edition = "2021"
-publish = false
+publish = true
 license = "MIT OR Apache-2.0"
 description = "Feature-gated Lean 4 runtime embedding for proofpatch (C ABI)."
+repository = "https://github.com/arclabs561/proofpatch"
+homepage = "https://github.com/arclabs561/proofpatch"
+readme = "README.md"
 
 [dependencies]
 libc = "0.2"

@@ -822,7 +822,9 @@ mod tests {
         std::env::remove_var("OPENAI_API_KEY");
         std::env::remove_var("OPENAI_MODEL");
 
-        let err = select_provider(Duration::from_millis(10)).await.unwrap_err();
+        let err = select_provider(Duration::from_millis(10))
+            .await
+            .unwrap_err();
         assert!(err.contains("No usable provider found"));
     }
 
@@ -878,7 +880,9 @@ mod tests {
         std::env::remove_var("OPENAI_API_KEY");
         std::env::remove_var("OPENAI_MODEL");
 
-        let err = select_provider(Duration::from_millis(10)).await.unwrap_err();
+        let err = select_provider(Duration::from_millis(10))
+            .await
+            .unwrap_err();
         assert!(err.contains("No usable provider found"));
     }
 }
