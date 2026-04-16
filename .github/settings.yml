@@ -1,0 +1,7 @@
+repository:
+  description: "CLI and MCP server for debuggable Lean 4 proof workflows"
+  homepage: ""
+  topics: lean4, mcp, proof-assistant, formal-verification
+  default_branch: main
+  has_wiki: false
+  has_projects: false

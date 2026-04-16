@@ -1,38 +1,17 @@
-//! proofpatch MCP server (HTTP via axum-mcp).
+//! proofpatch MCP server (stdio).
 //!
-//! Exposes `proofpatch-core` as MCP tools over HTTP/stdio.
+//! Exposes `proofpatch-core` as MCP tools over stdio (rmcp).
 //!
 //! Run:
 //! ```bash
 //! cargo run --quiet -p proofpatch-mcp --bin proofpatch-mcp
 //! ```
 //!
-//! Then:
-//! - `curl http://127.0.0.1:8087/health`
-//! - `curl http://127.0.0.1:8087/tools/list`
-//! - example call:
-//! ```bash
-//! curl -X POST http://127.0.0.1:8087/tools/call \
-//!   -H 'Content-Type: application/json' \
-//!   -d '{"name":"proofpatch_prompt","arguments":{"repo_root":"/abs/path/to/lean-repo","file":"Some/File.lean","lemma":"some_theorem"}}'
-//! ```
-//!
 //! Configuration:
-//! - `PROOFPATCH_MCP_ADDR` (default: `127.0.0.1:8087`)
-//! - `PROOFPATCH_MCP_TOOL_TIMEOUT_S` (default: `180`)
+//! - `PROOFPATCH_MCP_TOOLSET=minimal|full` (default: `minimal`)
 
 use async_trait::async_trait;
-use axum_mcp::{
-    extract_integer_opt, extract_string, extract_string_opt, McpServer, ServerConfig, Tool,
-};
 use proofpatch_core as plc;
-use serde_json::{json, Value};
-use smtkit;
-use std::path::PathBuf;
-use std::time::Duration as StdDuration;
-
-// Optional stdio MCP transport (Cursor can spawn without a daemon).
-#[cfg(feature = "stdio")]
 use rmcp::{
     handler::server::router::tool::ToolRouter as RmcpToolRouter,
     handler::server::wrapper::Parameters,
@@ -41,12 +20,37 @@ use rmcp::{
     transport::stdio,
     ErrorData as McpError, ServiceExt,
 };
-#[cfg(feature = "stdio")]
 use schemars::JsonSchema;
-#[cfg(feature = "stdio")]
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use smtkit;
+use std::path::PathBuf;
+use std::time::Duration as StdDuration;
 
-#[cfg(feature = "stdio")]
+fn extract_string(args: &Value, param: &str) -> Result<String, String> {
+    args.get(param)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("missing required string argument: {param}"))
+}
+
+fn extract_string_opt(args: &Value, param: &str) -> Option<String> {
+    args.get(param)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+fn extract_integer_opt(args: &Value, param: &str) -> Option<i64> {
+    args.get(param).and_then(|v| v.as_i64())
+}
+
+#[async_trait]
+trait Tool: Send + Sync {
+    fn description(&self) -> &str;
+    fn schema(&self) -> Value;
+    async fn call(&self, args: &Value) -> Result<Value, String>;
+}
+
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct UnifiedArgs {
     action: String,
@@ -2565,7 +2569,6 @@ impl Tool for ProofpatchLoopTool {
 // stdio MCP (rmcp) service
 // =========================
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, JsonSchema)]
 struct RepoFileSorriesArgs {
     repo_root: String,
@@ -2594,7 +2597,6 @@ struct RepoFileSorriesArgs {
     output_path: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ContextPackArgs {
     repo_root: String,
@@ -2613,7 +2615,6 @@ struct ContextPackArgs {
     max_imports: Option<u64>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, JsonSchema)]
 struct AgentStepArgs {
     repo_root: String,
@@ -2626,7 +2627,6 @@ struct AgentStepArgs {
     output_path: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct PromptArgs {
     repo_root: String,
@@ -2639,7 +2639,6 @@ struct PromptArgs {
     proofpatch_root: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct VerifyArgs {
     repo_root: String,
@@ -2651,7 +2650,6 @@ struct VerifyArgs {
     proofpatch_root: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct LocateSorriesArgs {
     repo_root: String,
@@ -2662,7 +2660,6 @@ struct LocateSorriesArgs {
     context_lines: Option<u64>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct PatchRegionArgs {
     repo_root: String,
@@ -2674,7 +2671,6 @@ struct PatchRegionArgs {
     timeout_s: Option<u64>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct PatchArgs {
     repo_root: String,
@@ -2688,7 +2684,6 @@ struct PatchArgs {
     proofpatch_root: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct SuggestArgs {
     repo_root: String,
@@ -2701,7 +2696,6 @@ struct SuggestArgs {
     proofpatch_root: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct RubberduckArgs {
     repo_root: String,
@@ -2714,7 +2708,6 @@ struct RubberduckArgs {
     proofpatch_root: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct LoopArgs {
     repo_root: String,
@@ -2729,7 +2722,6 @@ struct LoopArgs {
     proofpatch_root: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct ReportHtmlArgs {
     repo_root: String,
@@ -2746,13 +2738,11 @@ struct ReportHtmlArgs {
     output_path: Option<String>,
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Clone)]
 struct ProofpatchStdioMcp {
     tool_router: RmcpToolRouter<Self>,
 }
 
-#[cfg(feature = "stdio")]
 impl ProofpatchStdioMcp {
     fn new() -> Self {
         Self {
@@ -2761,13 +2751,11 @@ impl ProofpatchStdioMcp {
     }
 }
 
-#[cfg(feature = "stdio")]
 #[derive(Clone)]
 struct ProofpatchStdioMcpMinimal {
     tool_router: RmcpToolRouter<Self>,
 }
 
-#[cfg(feature = "stdio")]
 impl ProofpatchStdioMcpMinimal {
     fn new() -> Self {
         Self {
@@ -2776,7 +2764,6 @@ impl ProofpatchStdioMcpMinimal {
     }
 }
 
-#[cfg(feature = "stdio")]
 #[tool_router]
 impl ProofpatchStdioMcpMinimal {
     #[tool(description = "Unified proofpatch entrypoint (dispatches to sub-actions)")]
@@ -2799,7 +2786,6 @@ impl ProofpatchStdioMcpMinimal {
     }
 }
 
-#[cfg(feature = "stdio")]
 #[tool_router]
 impl ProofpatchStdioMcp {
     #[tool(description = "Triage a file: verify_summary + locate_sorries")]
@@ -3026,8 +3012,7 @@ impl ProofpatchStdioMcp {
     // ---------------------------------------------------------------------
     // Thin stdio wrappers for the rest of the proofpatch tool surface.
     //
-    // These delegate to the existing `axum-mcp` Tool implementations so HTTP
-    // and stdio stay behaviorally consistent.
+    // These delegate to the Tool implementations above for behavioral consistency.
     //
     // Some endpoints use typed `JsonSchema` arg structs (better UX in Cursor); others keep
     // `serde_json::Value` to avoid duplicating schemas for less frequently used tools.
@@ -3369,7 +3354,6 @@ impl ProofpatchStdioMcp {
     }
 }
 
-#[cfg(feature = "stdio")]
 #[tool_handler]
 impl rmcp::ServerHandler for ProofpatchStdioMcp {
     fn get_info(&self) -> ServerInfo {
@@ -3380,6 +3364,7 @@ impl rmcp::ServerHandler for ProofpatchStdioMcp {
                 name: "proofpatch-mcp".to_string(),
                 title: Some("proofpatch-mcp".to_string()),
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                description: None,
                 icons: None,
                 website_url: None,
             },
@@ -3393,7 +3378,6 @@ impl rmcp::ServerHandler for ProofpatchStdioMcp {
     }
 }
 
-#[cfg(feature = "stdio")]
 #[tool_handler]
 impl rmcp::ServerHandler for ProofpatchStdioMcpMinimal {
     fn get_info(&self) -> ServerInfo {
@@ -3402,6 +3386,7 @@ impl rmcp::ServerHandler for ProofpatchStdioMcpMinimal {
                 name: "proofpatch-mcp".to_string(),
                 title: Some("proofpatch-mcp".to_string()),
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                description: None,
                 icons: None,
                 website_url: None,
             },
@@ -3416,28 +3401,19 @@ impl rmcp::ServerHandler for ProofpatchStdioMcpMinimal {
 }
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Don’t emit logs to stdout if this ever becomes stdio-based.
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    // Minimal CLI:
-    // - `proofpatch-mcp --help`     => print usage and exit
-    // - `proofpatch-mcp --version`  => print version and exit
-    // - `proofpatch-mcp mcp-stdio`  => stdio MCP server (Cursor can spawn it)
-    // - default                     => HTTP MCP server (daemon)
     let arg1 = std::env::args().nth(1);
     if matches!(arg1.as_deref(), Some("-h" | "--help" | "help")) {
         println!("proofpatch-mcp");
-        println!("");
+        println!();
         println!("Usage:");
-        println!("  proofpatch-mcp            # HTTP MCP server (default)");
-        println!("  proofpatch-mcp mcp-stdio  # stdio MCP server (for Cursor)");
-        println!("");
+        println!("  proofpatch-mcp              # stdio MCP server (default)");
+        println!();
         println!("Env:");
-        println!("  PROOFPATCH_MCP_ADDR=127.0.0.1:8087");
-        println!("  PROOFPATCH_MCP_TOOL_TIMEOUT_S=180");
         println!("  PROOFPATCH_MCP_TOOLSET=minimal|full");
         return Ok(());
     }
@@ -3446,104 +3422,32 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    if arg1.as_deref() == Some("mcp-stdio") {
-        #[cfg(feature = "stdio")]
-        {
-            let toolset = std::env::var("PROOFPATCH_MCP_TOOLSET")
-                .unwrap_or_else(|_| "minimal".to_string())
-                .trim()
-                .to_lowercase();
-            if toolset == "minimal" || toolset.is_empty() {
-                let service = ProofpatchStdioMcpMinimal::new();
-                let running = service
-                    .serve(stdio())
-                    .await
-                    .map_err(|e| format!("failed to start stdio MCP server: {e:?}"))?;
-                running
-                    .waiting()
-                    .await
-                    .map_err(|e| format!("stdio MCP server task join failed: {e:?}"))?;
-                return Ok(());
-            } else {
-                let service = ProofpatchStdioMcp::new();
-                let running = service
-                    .serve(stdio())
-                    .await
-                    .map_err(|e| format!("failed to start stdio MCP server: {e:?}"))?;
-                running
-                    .waiting()
-                    .await
-                    .map_err(|e| format!("stdio MCP server task join failed: {e:?}"))?;
-                return Ok(());
-            }
-        }
-        #[cfg(not(feature = "stdio"))]
-        {
-            return Err("mcp-stdio requires compile-time feature `stdio`".into());
-        }
-    }
-
-    let addr =
-        std::env::var("PROOFPATCH_MCP_ADDR").unwrap_or_else(|_| "127.0.0.1:8087".to_string());
-
-    // The default axum-mcp tool timeout is 30s, but `lake build` / `lake env lean` can take longer
-    // even on successful runs (big mathlib files + linters + first-time dependency builds).
-    //
-    // Override with: PROOFPATCH_MCP_TOOL_TIMEOUT_S=900 (or larger)
-    let tool_timeout_s: u64 = std::env::var("PROOFPATCH_MCP_TOOL_TIMEOUT_S")
-        .ok()
-        .and_then(|s| s.trim().parse::<u64>().ok())
-        .unwrap_or(180);
-    let config = ServerConfig::new().with_tool_timeout(StdDuration::from_secs(tool_timeout_s));
-
-    // Tool surface: default to a single-entrypoint tool for agent ergonomics.
-    // Opt into `full` for the legacy expanded surface.
-    //
-    // - minimal (default): `proofpatch` (one tool that dispatches)
-    // - full: everything (legacy)
     let toolset = std::env::var("PROOFPATCH_MCP_TOOLSET")
         .unwrap_or_else(|_| "minimal".to_string())
         .trim()
         .to_lowercase();
+    if toolset == "minimal" || toolset.is_empty() {
+        let service = ProofpatchStdioMcpMinimal::new();
+        let running = service
+            .serve(stdio())
+            .await
+            .map_err(|e| format!("failed to start stdio MCP server: {e:?}"))?;
+        running
+            .waiting()
+            .await
+            .map_err(|e| format!("stdio MCP server task join failed: {e:?}"))?;
+    } else {
+        let service = ProofpatchStdioMcp::new();
+        let running = service
+            .serve(stdio())
+            .await
+            .map_err(|e| format!("failed to start stdio MCP server: {e:?}"))?;
+        running
+            .waiting()
+            .await
+            .map_err(|e| format!("stdio MCP server task join failed: {e:?}"))?;
+    }
 
-    let server = match toolset.as_str() {
-        "minimal" | "" => McpServer::with_config(config).tool("proofpatch", ProofpatchTool)?,
-        "full" => McpServer::with_config(config)
-            .tool("proofpatch_prompt", ProofpatchPromptTool)?
-            .tool("proofpatch_verify", ProofpatchVerifyTool)?
-            .tool("proofpatch_verify_summary", ProofpatchVerifySummaryTool)?
-            .tool("proofpatch_smt_probe", ProofpatchSmtProbeTool)?
-            .tool("proofpatch_smt_repro", ProofpatchSmtReproTool)?
-            // Short aliases (same implementations) for SMT-focused callers.
-            .tool("smt_probe", ProofpatchSmtProbeTool)?
-            .tool("smt_repro", ProofpatchSmtReproTool)?
-            .tool("proofpatch_suggest", ProofpatchSuggestTool)?
-            .tool("proofpatch_patch", ProofpatchPatchTool)?
-            .tool("proofpatch_patch_region", ProofpatchPatchRegionTool)?
-            .tool("proofpatch_patch_nearest", ProofpatchPatchNearestTool)?
-            .tool(
-                "proofpatch_tree_search_nearest",
-                ProofpatchTreeSearchNearestTool,
-            )?
-            .tool("proofpatch_locate_sorries", ProofpatchLocateSorriesTool)?
-            .tool("proofpatch_context_pack", ProofpatchContextPackTool)?
-            .tool("proofpatch_triage_file", ProofpatchTriageFileTool)?
-            .tool("proofpatch_agent_step", ProofpatchAgentStepTool)?
-            .tool("proofpatch_report_html", ProofpatchReportHtmlTool)?
-            .tool(
-                "proofpatch_rubberduck_prompt",
-                ProofpatchRubberduckPromptTool,
-            )?
-            .tool("proofpatch_loop", ProofpatchLoopTool)?,
-        other => {
-            return Err(
-                format!("unknown PROOFPATCH_MCP_TOOLSET={other} (expected minimal|full)").into(),
-            )
-        }
-    };
-
-    eprintln!("proofpatch MCP server listening on http://{addr}");
-    server.serve(&addr).await?;
     Ok(())
 }
 

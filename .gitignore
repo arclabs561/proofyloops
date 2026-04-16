@@ -24,3 +24,4 @@ lean-rust-embed-demo/
 target-install-cli/
 target-proofpatch/
 Cargo.lock
+research_papers/
