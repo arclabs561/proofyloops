@@ -38,7 +38,8 @@ jobs:
         run: |
           # CLI lives under proofpatch-cli/ but its Cargo package is `proofpatch`.
           cargo build -p proofpatch --bin proofpatch
-          cargo build -p proofpatch-mcp --bin proofpatch-mcp --features stdio
+          # rmcp's `transport-io` is enabled in the dep declaration; no extra feature flag needed.
+          cargo build -p proofpatch-mcp --bin proofpatch-mcp
           echo "$(pwd)/target/debug" >> "$GITHUB_PATH"
 
       - name: build lean tools (for PROOFPATCH_EXTRA_LEAN_PATH)
