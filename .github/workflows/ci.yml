@@ -36,7 +36,8 @@ jobs:
 
       - name: build proofpatch binaries
         run: |
-          cargo build -p proofpatch-cli --bin proofpatch
+          # CLI lives under proofpatch-cli/ but its Cargo package is `proofpatch`.
+          cargo build -p proofpatch --bin proofpatch
           cargo build -p proofpatch-mcp --bin proofpatch-mcp --features stdio
           echo "$(pwd)/target/debug" >> "$GITHUB_PATH"
 
