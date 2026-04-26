@@ -65,7 +65,7 @@ jobs:
           PROOFPATCH_AUTO_BUILD: "1"
 
       - name: mcp stdio smoke (fixture repo)
-        run: cargo run -p proofpatch-mcp --features stdio --example stdio_smoke
+        run: cargo run -p proofpatch-mcp --example stdio_smoke
         env:
           PROOFPATCH_SMOKE_REPO_ROOT: fixtures/lean-fixture
           PROOFPATCH_SMOKE_FILE: LeanFixture/Main.lean
