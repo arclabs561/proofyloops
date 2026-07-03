@@ -1,4 +1,4 @@
-## proofpatch
+# proofpatch
 
 [![CI](https://github.com/arclabs561/proofpatch/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/proofpatch/actions/workflows/ci.yml)
 
