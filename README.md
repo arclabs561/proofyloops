@@ -1,7 +1,5 @@
 # proofpatch
 
-[![CI](https://github.com/arclabs561/proofpatch/actions/workflows/ci.yml/badge.svg)](https://github.com/arclabs561/proofpatch/actions/workflows/ci.yml)
-
 `proofpatch` is a CLI + MCP server for **debuggable Lean 4 workflows**: verify, locate `sorry`s, extract bounded context packs, and (optionally) call an OpenAI-compatible LLM.
 
 ### Design
@@ -66,4 +64,3 @@ See `docs/smt.md` for:
 - `docs/usage.md`: common CLI patterns, focus flags, output stability.
 - `lean-tools/README.md`: `ProofpatchTools` (Lean side helper tactics).
 - `proofpatch-lean-embed/README.md`: optional Lean runtime embedding.
-
