@@ -64,3 +64,11 @@ See `docs/smt.md` for:
 - `docs/usage.md`: common CLI patterns, focus flags, output stability.
 - `lean-tools/README.md`: `ProofpatchTools` (Lean side helper tactics).
 - `proofpatch-lean-embed/README.md`: optional Lean runtime embedding.
+
+## License
+
+Licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or
+the [MIT license](LICENSE-MIT), at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in this project is licensed under the same terms.
