@@ -3357,46 +3357,30 @@ impl ProofpatchStdioMcp {
 #[tool_handler]
 impl rmcp::ServerHandler for ProofpatchStdioMcp {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            server_info: Implementation {
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(
                 // What clients should display as the server name.
                 // (Default is the rmcp framework name, which is misleading for debugging.)
-                name: "proofpatch-mcp".to_string(),
-                title: Some("proofpatch-mcp".to_string()),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                description: None,
-                icons: None,
-                website_url: None,
-            },
-            instructions: Some(
-                "Tools for Lean proof triage/patching loops (proofpatch). JSON-only, stdout reserved for MCP frames."
-                    .to_string(),
-            ),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+                Implementation::new("proofpatch-mcp", env!("CARGO_PKG_VERSION"))
+                    .with_title("proofpatch-mcp"),
+            )
+            .with_instructions(
+                "Tools for Lean proof triage/patching loops (proofpatch). JSON-only, stdout reserved for MCP frames.",
+            )
     }
 }
 
 #[tool_handler]
 impl rmcp::ServerHandler for ProofpatchStdioMcpMinimal {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            server_info: Implementation {
-                name: "proofpatch-mcp".to_string(),
-                title: Some("proofpatch-mcp".to_string()),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                description: None,
-                icons: None,
-                website_url: None,
-            },
-            instructions: Some(
-                "Tools for Lean proof triage/patching loops (proofpatch). Minimal tool surface."
-                    .to_string(),
-            ),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(
+                Implementation::new("proofpatch-mcp", env!("CARGO_PKG_VERSION"))
+                    .with_title("proofpatch-mcp"),
+            )
+            .with_instructions(
+                "Tools for Lean proof triage/patching loops (proofpatch). Minimal tool surface.",
+            )
     }
 }
 

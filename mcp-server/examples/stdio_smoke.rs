@@ -3,26 +3,16 @@
 //! This starts a child process running `proofpatch-mcp mcp-stdio` and calls a couple tools.
 //! It validates the stdio MCP surface without relying on Cursor as the client.
 
-#[cfg(not(feature = "stdio"))]
-fn main() {
-    eprintln!("stdio_smoke requires `--features stdio` (or default features enabled)");
-}
-
-#[cfg(feature = "stdio")]
 use rmcp::{
-    model::CallToolRequestParam,
+    model::CallToolRequestParams,
     service::ServiceExt,
     transport::{ConfigureCommandExt, TokioChildProcess},
 };
-#[cfg(feature = "stdio")]
 // keep serde_json in scope for json! macro usage
 use serde_json as _;
-#[cfg(feature = "stdio")]
 use std::path::PathBuf;
-#[cfg(feature = "stdio")]
 use tokio::process::Command;
 
-#[cfg(feature = "stdio")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -35,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let bin = workspace_root.join("target/debug/proofpatch-mcp");
     if !bin.exists() {
         anyhow::bail!(
-            "missing server binary at {}\n\nBuild it with:\n  cargo build -p proofpatch-mcp --bin proofpatch-mcp --features stdio",
+            "missing server binary at {}\n\nBuild it with:\n  cargo build -p proofpatch-mcp --bin proofpatch-mcp",
             bin.display()
         );
     }
@@ -72,9 +62,8 @@ async fn main() -> anyhow::Result<()> {
     //
     // Keep this cheap: triage one file with a small timeout.
     let triage = service
-        .call_tool(CallToolRequestParam {
-            name: "proofpatch".into(),
-            arguments: Some(
+        .call_tool(
+            CallToolRequestParams::new("proofpatch").with_arguments(
                 serde_json::json!({
                     "action": "triage_file",
                     "arguments": {
@@ -89,14 +78,13 @@ async fn main() -> anyhow::Result<()> {
                 .cloned()
                 .unwrap_or_default(),
             ),
-        })
+        )
         .await?;
     println!("proofpatch (triage_file): {:#?}", triage);
 
     let pack = service
-        .call_tool(CallToolRequestParam {
-            name: "proofpatch".into(),
-            arguments: Some(
+        .call_tool(
+            CallToolRequestParams::new("proofpatch").with_arguments(
                 serde_json::json!({
                     "action": "context_pack",
                     "arguments": {
@@ -114,15 +102,14 @@ async fn main() -> anyhow::Result<()> {
                 .cloned()
                 .unwrap_or_default(),
             ),
-        })
+        )
         .await?;
     println!("proofpatch (context_pack): {:#?}", pack);
 
     // Exercise another action: locate sorries (fixture should usually be sorry-free).
     let locate = service
-        .call_tool(CallToolRequestParam {
-            name: "proofpatch".into(),
-            arguments: Some(
+        .call_tool(
+            CallToolRequestParams::new("proofpatch").with_arguments(
                 serde_json::json!({
                     "action": "locate_sorries",
                     "arguments": {
@@ -136,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
                 .cloned()
                 .unwrap_or_default(),
             ),
-        })
+        )
         .await?;
     println!("proofpatch (locate_sorries): {:#?}", locate);
 
