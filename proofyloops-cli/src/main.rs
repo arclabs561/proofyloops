@@ -1241,11 +1241,15 @@ fn main() -> Result<(), String> {
                         .ok()
                     })
                     .and_then(|pack| {
-                        let label = format!("line:{}", pack.focus.line.unwrap_or(0));
+                        let decl = selected_sorry
+                            .as_ref()
+                            .and_then(|sorry| sorry.decl_name.as_deref())
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| format!("line:{}", pack.focus.line.unwrap_or(0)));
                         plc::build_rubberduck_prompt_from_excerpt(
                             &repo_root,
                             &file,
-                            &label,
+                            &decl,
                             &pack.focus.excerpt,
                             first_error_text.as_deref(),
                         )

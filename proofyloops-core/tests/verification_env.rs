@@ -114,7 +114,7 @@ fn verification_entrypoints_do_not_load_dotenv_or_mcp_credentials() {
     let excerpt_prompt = plc::build_rubberduck_prompt_from_excerpt(
         &repo_root,
         "Example.lean",
-        "synthetic focus",
+        "synthetic_example",
         "theorem synthetic_example : True := by\n  trivial",
         None,
     )

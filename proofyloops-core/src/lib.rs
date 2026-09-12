@@ -2265,7 +2265,7 @@ pub fn build_rubberduck_prompt(
 pub fn build_rubberduck_prompt_from_excerpt(
     repo_root: &Path,
     file_rel: &str,
-    focus_label: &str,
+    decl: &str,
     excerpt: &str,
     diagnostics: Option<&str>,
 ) -> Result<PromptPayload, String> {
@@ -2303,16 +2303,28 @@ pub fn build_rubberduck_prompt_from_excerpt(
     // Research hooks (optional).
     //
     // Note: these are suggestions embedded into the prompt; proofyloops does not execute them.
-    let q = focus_label;
-    let web_q = format!("{q} mathlib Lean");
+    let research = config::load_from_repo_root(&repo_root)?
+        .map(|config| config.research.suggestion_for_decl(decl))
+        .unwrap_or_else(|| config::generic_research_suggestion(decl));
+    let web_q = format!("{} mathlib Lean", research.query);
+    let mut research_steps = vec![serde_json::json!({
+        "tool": "web_search",
+        "args": { "query": web_q, "max_results": 5 }
+    })];
+    if let Some(preset_name) = research.preset_name {
+        research_steps.insert(
+            0,
+            serde_json::json!({
+                "tool": "proofyloops research-auto",
+                "args": { "repo": "<repo_root>", "preset": preset_name }
+            }),
+        );
+    }
     user.push_str("\n\nResearch (optional):\n");
     user.push_str("- Suggested research plan (machine-readable JSON):\n");
     let plan = serde_json::json!({
         "goal": "Collect a reliable statement and a Lean mapping plan.",
-        "steps": [
-            { "tool": "proofyloops research-auto", "args": { "repo": "<repo_root>", "preset": "<preset_name>" } },
-            { "tool": "web_search", "args": { "query": web_q, "max_results": 5 } }
-        ],
+        "steps": research_steps,
         "extract": {
             "schema": {
                 "type": "object",
@@ -2351,7 +2363,7 @@ pub fn build_rubberduck_prompt_from_excerpt(
     Ok(PromptPayload {
         repo_root: repo_root.display().to_string(),
         file: p.display().to_string(),
-        decl: focus_label.to_string(),
+        decl: decl.to_string(),
         excerpt: excerpt.to_string(),
         system,
         user,
