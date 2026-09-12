@@ -1,5 +1,5 @@
 {"version": "1.1.0",
  "packagesDir": ".lake/packages",
  "packages": [],
- "name": "proofyloops_lean_tools",
+ "name": "proofyloops_lean_embed",
  "lakeDir": ".lake"}

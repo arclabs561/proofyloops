@@ -1,9 +1,9 @@
-import ProofpatchTools
+import ProofyloopsTools
 
 namespace LeanFixture
 
--- Ensure proofpatch can extend LEAN_PATH to import the helper tools package.
-theorem proofpatch_tools_smoke : True := by
+-- Ensure proofyloops can extend LEAN_PATH to import the helper tools package.
+theorem proofyloops_tools_smoke : True := by
   pp_dump
   trivial
 

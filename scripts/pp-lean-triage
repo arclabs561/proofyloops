@@ -3,13 +3,13 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-pp-lean-triage: wrapper around `proofpatch triage-file` with stable artifact output.
+pp-lean-triage: wrapper around `proofyloops triage-file` with stable artifact output.
 
 Usage:
   pp-lean-triage --repo <lean_repo_root_or_any_parent> --file <relpath> [--timeout-s N] [--raw]
 
 Behavior:
-- Writes the full JSON to: <proofpatch_repo>/.generated/triage/<sanitized-file>.json
+- Writes the full JSON to: <proofyloops_repo>/.generated/triage/<sanitized-file>.json
 - Prints a small JSON summary to stdout (and includes the artifact path).
 EOF
 }
@@ -45,13 +45,18 @@ SAFE_FILE="${FILE//\//__}"
 SAFE_FILE="${SAFE_FILE// /_}"
 OUT_PATH="${OUT_DIR}/${SAFE_FILE}.json"
 
-PROOFPATCH_BIN="${PROOFPATCH_BIN:-}"
-if [[ -z "${PROOFPATCH_BIN}" ]]; then
-  if [[ -x "${ROOT}/target/debug/proofpatch" ]]; then
-    PROOFPATCH_BIN="${ROOT}/target/debug/proofpatch"
-  else
-    PROOFPATCH_BIN="cargo run --quiet -p proofpatch-core --bin proofpatch --"
-  fi
+PROOFYLOOPS_BIN="${PROOFYLOOPS_BIN:-${PROOFPATCH_BIN:-}}"
+if [[ -n "${PROOFYLOOPS_BIN}" ]]; then
+  # Overrides are executable paths, not shell snippets. Keeping the command in
+  # an array preserves spaces in both the executable and the forwarded args.
+  PROOFYLOOPS_CMD=("${PROOFYLOOPS_BIN}")
+elif [[ -x "${ROOT}/target/debug/proofyloops" ]]; then
+  PROOFYLOOPS_CMD=("${ROOT}/target/debug/proofyloops")
+else
+  PROOFYLOOPS_CMD=(
+    cargo run --quiet --manifest-path "${ROOT}/proofyloops-cli/Cargo.toml"
+    -p proofyloops --bin proofyloops --
+  )
 fi
 
 ARGS=(triage-file --repo "${REPO}" --file "${FILE}" --output-json "${OUT_PATH}")
@@ -62,8 +67,7 @@ if [[ "${RAW}" -eq 1 ]]; then
   ARGS+=(--include-raw-verify)
 fi
 
-# shellcheck disable=SC2086
-SMALL="$(${PROOFPATCH_BIN} "${ARGS[@]}")"
+SMALL="$("${PROOFYLOOPS_CMD[@]}" "${ARGS[@]}")"
 
 if command -v jq >/dev/null 2>&1; then
   echo "${SMALL}" | jq --arg out_path "${OUT_PATH}" '. + {artifact: {path: $out_path}}'
@@ -72,4 +76,3 @@ else
   echo "${SMALL}"
   echo "{\"artifact\":{\"path\":\"${OUT_PATH}\"}}"
 fi
-

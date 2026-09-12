@@ -6,10 +6,10 @@ usage() {
 pp-lean-goal-dump-nearest: produce a goal snapshot for the nearest `sorry` without editing the repo.
 
 How it works:
-- Builds proofpatch's Lean helper package (ProofpatchTools).
-- Runs `proofpatch triage-file` to select the primary `sorry` region.
+- Builds proofyloops's Lean helper package (ProofyloopsTools).
+- Runs `proofyloops triage-file` to select the primary `sorry` region.
 - Creates a temporary Lean file that:
-  - includes `import ProofpatchTools`
+  - includes `import ProofyloopsTools`
   - replaces the selected `sorry` with:
       by
         pp_dump
@@ -95,7 +95,7 @@ if [[ ! -f "${ABS_FILE}" ]]; then
   exit 2
 fi
 
-TMP="$(mktemp -t proofpatch-goal-dump.XXXXXX.lean)"
+TMP="$(mktemp -t proofyloops-goal-dump.XXXXXX.lean)"
 export ABS_FILE REGION_START REGION_END TMP
 python3 - <<'PY'
 import io,sys,os,re
@@ -111,7 +111,7 @@ with open(abs_file, "r", encoding="utf-8") as f:
 PRELUDE = r'''
 open Lean Meta Elab Tactic
 
-namespace ProofpatchInline
+namespace ProofyloopsInline
 
 /-!
 `pp_dump` prints the current goals as a single JSON object (one line).
@@ -130,13 +130,13 @@ elab "pp_dump" : tactic => do
     let fmt ← liftMetaM (Lean.Meta.ppGoal g)
     goalsJson := goalsJson.push (Json.mkObj [("pretty", Json.str fmt.pretty)])
   let out := Json.mkObj [
-    ("tool", Json.str "proofpatch"),
+    ("tool", Json.str "proofyloops"),
     ("kind", Json.str "pp_dump"),
     ("goals", Json.arr goalsJson)
   ]
   logInfo m!"{toString out}"
 
-end ProofpatchInline
+end ProofyloopsInline
 
 '''
 

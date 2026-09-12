@@ -1,6 +1,6 @@
-# proofpatch Lean tools
+# proofyloops Lean tools
 
-This is a tiny, dependency-free Lean 4 package that provides helper tactics for `proofpatch`.
+This is a tiny, dependency-free Lean 4 package that provides helper tactics for `proofyloops`.
 
 ## Build
 
@@ -12,16 +12,16 @@ lake build
 ## Use in another Lean repo (non-invasive)
 
 1) Build this package once.
-2) Set `PROOFPATCH_EXTRA_LEAN_PATH` to its build output directory:
+2) Set `PROOFYLOOPS_EXTRA_LEAN_PATH` to its build output directory:
 
 ```bash
-export PROOFPATCH_EXTRA_LEAN_PATH="$(pwd)/lean-tools/.lake/build/lib/lean"
+export PROOFYLOOPS_EXTRA_LEAN_PATH="$(pwd)/lean-tools/.lake/build/lib/lean"
 ```
 
 3) In the target file, add:
 
 ```lean
-import ProofpatchTools
+import ProofyloopsTools
 ```
 
 4) Inside a `by` proof, call:

@@ -1,6 +1,6 @@
 # SMT oracle (optional, via smtkit)
 
-`proofpatch` can optionally use an external SMT solver (via `smtkit`) as a **heuristic signal** for small linear integer arithmetic (LIA) entailment checks.
+`proofyloops` can optionally use an external SMT solver (via `smtkit`) as a **heuristic signal** for small linear integer arithmetic (LIA) entailment checks.
 
 - **Purpose**: rank/prune candidates in `tree-search-nearest` using cheap entailment checks.
 - **Soundness**: Lean verification is the only “real” check; SMT is advisory.
@@ -10,13 +10,13 @@
 Canonical command:
 
 ```bash
-proofpatch smt-probe
+proofyloops smt-probe
 ```
 
 Alias (equivalent):
 
 ```bash
-proofpatch smt probe
+proofyloops smt probe
 ```
 
 This reports:
@@ -29,7 +29,7 @@ This reports:
 SMT checks usually need goal extraction first. For best results, run with:
 
 ```bash
-proofpatch tree-search-nearest ... --goal-dump --smt-precheck
+proofyloops tree-search-nearest ... --goal-dump --smt-precheck
 ```
 
 Useful knobs (all are optional; defaults are conservative):
@@ -49,13 +49,13 @@ Useful knobs (all are optional; defaults are conservative):
 Canonical command:
 
 ```bash
-proofpatch smt-repro --input-json run.json --emit-smt2 repro.smt2 --emit-proof repro.sexp
+proofyloops smt-repro --input-json run.json --emit-smt2 repro.smt2 --emit-proof repro.sexp
 ```
 
 Alias (equivalent):
 
 ```bash
-proofpatch smt repro --input-json run.json --emit-smt2 repro.smt2 --emit-proof repro.sexp
+proofyloops smt repro --input-json run.json --emit-smt2 repro.smt2 --emit-proof repro.sexp
 ```
 
 `--input-json` can be either:
@@ -67,11 +67,11 @@ proofpatch smt repro --input-json run.json --emit-smt2 repro.smt2 --emit-proof r
 
 Two equivalent ways to probe solver capabilities:
 
-- **Minimal toolset** (`PROOFPATCH_MCP_TOOLSET=minimal`): call the `proofpatch` tool with `action: "smt_probe"`.
-- **Full toolset** (`PROOFPATCH_MCP_TOOLSET=full`): call the `proofpatch_smt_probe` tool (or the short alias `smt_probe`).
+- **Minimal toolset** (`PROOFYLOOPS_MCP_TOOLSET=minimal`): call the `proofyloops` tool with `action: "smt_probe"`.
+- **Full toolset** (`PROOFYLOOPS_MCP_TOOLSET=full`): call the `proofyloops_smt_probe` tool (or the short alias `smt_probe`).
 
 Two equivalent ways to run repro:
 
-- **Minimal toolset** (`PROOFPATCH_MCP_TOOLSET=minimal`): call the `proofpatch` tool with `action: "smt_repro"` (aliases like `smt.repro` also work).
-- **Full toolset** (`PROOFPATCH_MCP_TOOLSET=full`): call the `proofpatch_smt_repro` tool (or the short alias `smt_repro`).
+- **Minimal toolset** (`PROOFYLOOPS_MCP_TOOLSET=minimal`): call the `proofyloops` tool with `action: "smt_repro"` (aliases like `smt.repro` also work).
+- **Full toolset** (`PROOFYLOOPS_MCP_TOOLSET=full`): call the `proofyloops_smt_repro` tool (or the short alias `smt_repro`).
 

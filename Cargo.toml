@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-  "proofpatch-core",
-  "proofpatch-cli",
+  "proofyloops-core",
+  "proofyloops-cli",
   "mcp-server",
-  "proofpatch-lean-embed",
+  "proofyloops-lean-embed",
 ]
 
