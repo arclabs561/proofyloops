@@ -1121,7 +1121,7 @@ fn main() -> Result<(), String> {
             }
             #[cfg(not(feature = "lean-embed"))]
             {
-                return Err("lean-embed-smoke requires building with: cargo run -p proofyloops --features lean-embed --bin proofyloops -- lean-embed-smoke".to_string());
+                Err("lean-embed-smoke requires building with: cargo run -p proofyloops --features lean-embed --bin proofyloops -- lean-embed-smoke".to_string())
             }
         }
 
