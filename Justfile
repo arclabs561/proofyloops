@@ -1,37 +1,37 @@
 default: help
 
-## proofpatch local workflows (CLI + MCP)
+## proofyloops local workflows (CLI + MCP)
 
 help:
-    @echo "proofpatch (repo-local)"
+    @echo "proofyloops (repo-local)"
     @echo ""
     @echo "Common:"
     @echo "  just test           # run Rust tests"
-    @echo "  just build          # build proofpatch CLI + MCP"
-    @echo "  just cli-help       # show proofpatch CLI help"
-    @echo "  just mcp-help       # show proofpatch-mcp help"
+    @echo "  just build          # build proofyloops CLI + MCP"
+    @echo "  just cli-help       # show proofyloops CLI help"
+    @echo "  just mcp-help       # show proofyloops-mcp help"
     @echo "  just mcp-stdio      # run MCP server in stdio mode"
     @echo ""
     @echo "Tip: install a fast local binary:"
-    @echo "  cargo build -p proofpatch --bin proofpatch --release"
+    @echo "  cargo build -p proofyloops --bin proofyloops --release"
 
 test:
     cargo test -q
 
 build:
-    cargo build -q -p proofpatch --bin proofpatch
-    cargo build -q -p proofpatch-mcp --bin proofpatch-mcp
+    cargo build -q -p proofyloops --bin proofyloops
+    cargo build -q -p proofyloops-mcp --bin proofyloops-mcp
 
 build-release:
-    cargo build -q -p proofpatch --bin proofpatch --release
-    cargo build -q -p proofpatch-mcp --bin proofpatch-mcp --release
+    cargo build -q -p proofyloops --bin proofyloops --release
+    cargo build -q -p proofyloops-mcp --bin proofyloops-mcp --release
 
 cli-help:
-    cargo run -q -p proofpatch --bin proofpatch -- --help
+    cargo run -q -p proofyloops --bin proofyloops -- --help
 
 mcp-help:
-    cargo run -q -p proofpatch-mcp --bin proofpatch-mcp -- --help
+    cargo run -q -p proofyloops-mcp --bin proofyloops-mcp -- --help
 
 mcp-stdio:
-    cargo run -q -p proofpatch-mcp --bin proofpatch-mcp -- mcp-stdio
+    cargo run -q -p proofyloops-mcp --bin proofyloops-mcp -- mcp-stdio
 

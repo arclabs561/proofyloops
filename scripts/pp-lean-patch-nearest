@@ -12,10 +12,10 @@ Usage:
 Safety:
 - Default is dry-run (no file writes).
 - With --apply, the script writes the patch to disk *transactionally*:
-  it saves a backup, runs `proofpatch patch-nearest --write`, and rolls back if verify fails.
+  it saves a backup, runs `proofyloops patch-nearest --write`, and rolls back if verify fails.
 
 Notes:
-- Uses `proofpatch patch-nearest` under the hood.
+- Uses `proofyloops patch-nearest` under the hood.
 - If `jq` is available, emits pretty JSON.
 EOF
 }
@@ -51,13 +51,18 @@ if [[ -z "${REPO}" || -z "${FILE}" || -z "${REPL_FILE}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROOFPATCH_BIN="${PROOFPATCH_BIN:-}"
-if [[ -z "${PROOFPATCH_BIN}" ]]; then
-  if [[ -x "${ROOT}/target/debug/proofpatch" ]]; then
-    PROOFPATCH_BIN="${ROOT}/target/debug/proofpatch"
-  else
-    PROOFPATCH_BIN="cargo run --quiet -p proofpatch-core --bin proofpatch --"
-  fi
+PROOFYLOOPS_BIN="${PROOFYLOOPS_BIN:-${PROOFPATCH_BIN:-}}"
+if [[ -n "${PROOFYLOOPS_BIN}" ]]; then
+  # Overrides are executable paths, not shell snippets. Keeping the command in
+  # an array preserves spaces in both the executable and the forwarded args.
+  PROOFYLOOPS_CMD=("${PROOFYLOOPS_BIN}")
+elif [[ -x "${ROOT}/target/debug/proofyloops" ]]; then
+  PROOFYLOOPS_CMD=("${ROOT}/target/debug/proofyloops")
+else
+  PROOFYLOOPS_CMD=(
+    cargo run --quiet --manifest-path "${ROOT}/proofyloops-cli/Cargo.toml"
+    -p proofyloops --bin proofyloops --
+  )
 fi
 
 ARGS=(patch-nearest --repo "${REPO}" --file "${FILE}" --replacement-file "${REPL_FILE}")
@@ -75,8 +80,7 @@ if [[ "${RAW}" -eq 1 ]]; then
 fi
 
 if [[ "${APPLY}" -eq 0 ]]; then
-  # shellcheck disable=SC2086
-  OUT="$(${PROOFPATCH_BIN} "${ARGS[@]}")"
+  OUT="$("${PROOFYLOOPS_CMD[@]}" "${ARGS[@]}")"
   if command -v jq >/dev/null 2>&1; then
     echo "${OUT}" | jq .
   else
@@ -94,12 +98,11 @@ if [[ ! -f "${ABS_FILE}" ]]; then
   exit 2
 fi
 
-BACKUP="${ABS_FILE}.proofpatch.bak"
+BACKUP="${ABS_FILE}.proofyloops.bak"
 cp "${ABS_FILE}" "${BACKUP}"
 
 set +e
-# shellcheck disable=SC2086
-OUT="$(${PROOFPATCH_BIN} "${ARGS[@]}" --write)"
+OUT="$("${PROOFYLOOPS_CMD[@]}" "${ARGS[@]}" --write)"
 STATUS=$?
 set -e
 
@@ -127,4 +130,3 @@ else
   echo "${OUT}"
   echo "{\"rolled_back\":false}"
 fi
-

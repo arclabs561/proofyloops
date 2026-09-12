@@ -1,6 +1,6 @@
 .venv/
 
-# Rust build artifacts (proofpatch-core, mcp-server)
+# Rust build artifacts (proofyloops-core, mcp-server)
 target/
 **/target/
 
@@ -22,6 +22,8 @@ tmp/
 lean-rust-embed-demo/
 
 target-install-cli/
-target-proofpatch/
-Cargo.lock
+target-proofyloops/
+# This workspace ships CLI applications; keep their tested dependency resolution.
+!Cargo.lock
 research_papers/
+.agents/

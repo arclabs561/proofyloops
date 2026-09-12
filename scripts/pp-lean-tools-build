@@ -3,14 +3,14 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-pp-lean-tools-build: build proofpatch's Lean helper package and print env exports.
+pp-lean-tools-build: build proofyloops's Lean helper package and print env exports.
 
 Usage:
   pp-lean-tools-build
 
 Output:
   Prints a single line:
-    export PROOFPATCH_EXTRA_LEAN_PATH="<abs path>"
+    export PROOFYLOOPS_EXTRA_LEAN_PATH="<abs path>"
 EOF
 }
 
@@ -38,8 +38,7 @@ if ! command -v "${LAKE}" >/dev/null 2>&1; then
 fi
 
 cd "${TOOLS}"
-${LAKE} build 1>&2
+"${LAKE}" build 1>&2
 
 OUT="${TOOLS}/.lake/build/lib/lean"
-echo "export PROOFPATCH_EXTRA_LEAN_PATH=\"${OUT}\""
-
+echo "export PROOFYLOOPS_EXTRA_LEAN_PATH=\"${OUT}\""

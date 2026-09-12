@@ -19,13 +19,19 @@ jobs:
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: "stable"
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: rustfmt
         run: cargo fmt --all --check
 
       - name: cargo test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
+
+      - name: optional Rust features
+        run: cargo test --locked --workspace --features lsp,planner,axi-agent
+
+      - name: clippy
+        run: cargo clippy --locked --workspace --all-targets --features lsp,planner,axi-agent -- -D warnings
 
   e2e-lean:
     runs-on: ubuntu-latest
@@ -41,18 +47,24 @@ jobs:
 
       - name: install elan (Lean toolchain manager)
         run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y
+          curl --fail --location --silent --show-error \
+            https://github.com/leanprover/elan/releases/download/v4.2.3/elan-x86_64-unknown-linux-gnu.tar.gz \
+            --output /tmp/elan-init.tar.gz
+          echo "df0b2b3a439961ffcbb3985214365ffe40f49bc871df04dff268c7d8e21ca8b2  /tmp/elan-init.tar.gz" \
+            | sha256sum --check
+          tar --extract --gzip --file /tmp/elan-init.tar.gz --directory /tmp
+          /tmp/elan-init -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: build proofpatch binaries
+      - name: build proofyloops binaries
         run: |
-          # CLI lives under proofpatch-cli/ but its Cargo package is `proofpatch`.
-          cargo build -p proofpatch --bin proofpatch
+          # CLI lives under proofyloops-cli/ but its Cargo package is `proofyloops`.
+          cargo build --locked -p proofyloops --bin proofyloops
           # rmcp's `transport-io` is enabled in the dep declaration; no extra feature flag needed.
-          cargo build -p proofpatch-mcp --bin proofpatch-mcp
+          cargo build --locked -p proofyloops-mcp --bin proofyloops-mcp
           echo "$(pwd)/target/debug" >> "$GITHUB_PATH"
 
-      - name: build lean tools (for PROOFPATCH_EXTRA_LEAN_PATH)
+      - name: build lean tools (for PROOFYLOOPS_EXTRA_LEAN_PATH)
         run: |
           cd lean-tools
           lake build
@@ -62,33 +74,60 @@ jobs:
           cd fixtures/lean-fixture
           lake build
 
-      - name: proofpatch e2e (verify/triage)
+      - name: proofyloops e2e (verify/triage)
         run: |
-          proofpatch triage-file \
+          proofyloops triage-file \
             --repo fixtures/lean-fixture \
             --file LeanFixture/Main.lean \
             --timeout-s 120 \
             --max-sorries 5 \
-            --context-lines 1
+            --context-lines 1 > triage-main.json
+          cat triage-main.json
+          jq -e '.verify.summary.ok == true and
+            .verify.summary.timeout == false and
+            .verify.summary.counts.errors == 0 and
+            .verify.summary.counts.sorry_warnings == 0 and
+            .sorries.count == 0 and .sorries.conservative_count == 0' triage-main.json
+          # Lean accepts admissions with exit 0. Check that triage still exposes them.
+          proofyloops triage-file \
+            --repo fixtures/lean-fixture \
+            --file LeanFixture/SmtDemo.lean \
+            --timeout-s 120 --max-sorries 5 --context-lines 1 > triage-admitted.json
+          cat triage-admitted.json
+          jq -e '.verify.summary.ok == true and
+            .verify.summary.timeout == false and
+            .verify.summary.counts.errors == 0 and
+            .verify.summary.counts.sorry_warnings == 3 and
+            .sorries.count == 3 and
+            .next_action.kind == "patch_nearest_sorry"' triage-admitted.json
         env:
           LAKE: lake
-          PROOFPATCH_AUTO_BUILD: "1"
+          PROOFYLOOPS_AUTO_BUILD: "1"
 
       - name: mcp stdio smoke (fixture repo)
-        run: cargo run -p proofpatch-mcp --example stdio_smoke
-        env:
-          PROOFPATCH_SMOKE_REPO_ROOT: fixtures/lean-fixture
-          PROOFPATCH_SMOKE_FILE: LeanFixture/Main.lean
-
-      - name: proofpatch e2e (fixture imports ProofpatchTools)
         run: |
-          proofpatch triage-file \
+          PROOFYLOOPS_MCP_TOOLSET=minimal cargo run --locked -p proofyloops-mcp --example stdio_smoke
+          PROOFYLOOPS_MCP_TOOLSET=full cargo run --locked -p proofyloops-mcp --example stdio_smoke
+        env:
+          PROOFYLOOPS_SMOKE_REPO_ROOT: fixtures/lean-fixture
+          PROOFYLOOPS_SMOKE_FILE: LeanFixture/Main.lean
+          PROOFYLOOPS_SMOKE_DECL: one_plus_one_eq_two
+
+      - name: proofyloops e2e (fixture imports ProofyloopsTools)
+        run: |
+          proofyloops triage-file \
             --repo fixtures/lean-fixture \
             --file LeanFixture/WithTools.lean \
             --timeout-s 120 \
             --max-sorries 5 \
-            --context-lines 1
+            --context-lines 1 > triage-tools.json
+          cat triage-tools.json
+          jq -e '.verify.summary.ok == true and
+            .verify.summary.timeout == false and
+            .verify.summary.counts.errors == 0 and
+            .verify.summary.counts.sorry_warnings == 0 and
+            .sorries.count == 0 and .sorries.conservative_count == 0' triage-tools.json
         env:
           LAKE: lake
-          PROOFPATCH_AUTO_BUILD: "1"
-          PROOFPATCH_EXTRA_LEAN_PATH: ${{ github.workspace }}/lean-tools/.lake/build/lib/lean
+          PROOFYLOOPS_AUTO_BUILD: "1"
+          PROOFYLOOPS_EXTRA_LEAN_PATH: ${{ github.workspace }}/lean-tools/.lake/build/lib/lean

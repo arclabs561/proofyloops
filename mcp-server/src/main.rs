@@ -1,19 +1,18 @@
-//! proofpatch MCP server (stdio).
+//! proofyloops MCP server (stdio).
 //!
-//! Exposes `proofpatch-core` as MCP tools over stdio (rmcp).
+//! Exposes `proofyloops-core` as MCP tools over stdio (rmcp).
 //!
 //! Run:
 //! ```bash
-//! cargo run --quiet -p proofpatch-mcp --bin proofpatch-mcp
+//! cargo run --quiet -p proofyloops-mcp --bin proofyloops-mcp
 //! ```
 //!
 //! Configuration:
-//! - `PROOFPATCH_MCP_TOOLSET=minimal|full` (default: `minimal`)
+//! - `PROOFYLOOPS_MCP_TOOLSET=minimal|full` (default: `minimal`)
 
 use async_trait::async_trait;
-use proofpatch_core as plc;
+use proofyloops_core as plc;
 use rmcp::{
-    handler::server::router::tool::ToolRouter as RmcpToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
@@ -23,9 +22,11 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use smtkit;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
+
+#[cfg(test)]
+mod verification_tests;
 
 fn extract_string(args: &Value, param: &str) -> Result<String, String> {
     args.get(param)
@@ -46,7 +47,6 @@ fn extract_integer_opt(args: &Value, param: &str) -> Option<i64> {
 
 #[async_trait]
 trait Tool: Send + Sync {
-    fn description(&self) -> &str;
     fn schema(&self) -> Value;
     async fn call(&self, args: &Value) -> Result<Value, String>;
 }
@@ -58,11 +58,11 @@ struct UnifiedArgs {
     arguments: serde_json::Value,
 }
 
-fn default_proofpatch_root() -> PathBuf {
-    // `.../proofpatch/mcp-server` → `.../proofpatch`
+fn default_proofyloops_root() -> PathBuf {
+    // `.../proofyloops/mcp-server` → `.../proofyloops`
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .expect("mcp-server should be nested under proofpatch/")
+        .expect("mcp-server should be nested under proofyloops/")
         .to_path_buf()
 }
 
@@ -108,10 +108,9 @@ fn parse_first_diagnostic_location(line: &str) -> Option<(String, usize, usize, 
     // Return: (path, line, col, kind)
     let (kind, idx) = if let Some(i) = line.find(": error:").or_else(|| line.find(": error(")) {
         ("error".to_string(), i)
-    } else if let Some(i) = line.find(": warning:") {
-        ("warning".to_string(), i)
     } else {
-        return None;
+        let i = line.find(": warning:")?;
+        ("warning".to_string(), i)
     };
 
     let prefix = line[..idx].trim_end();
@@ -135,10 +134,15 @@ fn summarize_verify_like_output(raw: &Value) -> Value {
     let stdout = raw.get("stdout").and_then(|v| v.as_str()).unwrap_or("");
     let stderr = raw.get("stderr").and_then(|v| v.as_str()).unwrap_or("");
 
-    let sorry_warnings = count_substring(stdout, "declaration uses 'sorry'")
-        + count_substring(stderr, "declaration uses 'sorry'")
-        + count_substring(stdout, "declaration uses 'admit'")
-        + count_substring(stderr, "declaration uses 'admit'");
+    let sorry_warnings: usize = [
+        "declaration uses 'sorry'",
+        "declaration uses 'admit'",
+        "declaration uses `sorry`",
+        "declaration uses `admit`",
+    ]
+    .iter()
+    .map(|needle| stdout.matches(needle).count() + stderr.matches(needle).count())
+    .sum();
 
     let warning_count = count_substring(stdout, ": warning:")
         + count_substring(stdout, ": warning(")
@@ -174,24 +178,24 @@ fn summarize_verify_like_output(raw: &Value) -> Value {
 }
 
 // NOTE: The MCP server used to bridge to a Python CLI.
-// It is Rust-native now (proofpatch-core has the provider router), so there is no reason to shell out.
+// It is Rust-native now (proofyloops-core has the provider router), so there is no reason to shell out.
 
-fn proofpatch_root_from_args(args: &Value) -> Result<PathBuf, String> {
-    if let Ok(env_root) = std::env::var("PROOFPATCH_ROOT") {
+fn proofyloops_root_from_args(args: &Value) -> Result<PathBuf, String> {
+    if let Ok(env_root) = plc::environment::var("PROOFYLOOPS_ROOT") {
         if !env_root.trim().is_empty() {
             return Ok(PathBuf::from(env_root));
         }
     }
-    let root = extract_string_opt(args, "proofpatch_root")
-        .unwrap_or_else(|| default_proofpatch_root().to_string_lossy().to_string());
+    let root = extract_string_opt(args, "proofyloops_root")
+        .unwrap_or_else(|| default_proofyloops_root().to_string_lossy().to_string());
     Ok(PathBuf::from(root))
 }
 
 fn repo_root_from_args(args: &Value) -> Result<PathBuf, String> {
     let repo_root = PathBuf::from(extract_string(args, "repo_root")?);
-    // Parse `proofpatch_root` to keep schemas honest, but do not use it for anything.
+    // Parse `proofyloops_root` to keep schemas honest, but do not use it for anything.
     // Repo-root resolution is independent of helper-root.
-    let _ = proofpatch_root_from_args(args)?;
+    let _ = proofyloops_root_from_args(args)?;
     Ok(repo_root)
 }
 
@@ -221,14 +225,10 @@ fn resolve_lean_repo_root(repo_root: PathBuf, file: Option<&str>) -> Result<Path
     plc::find_lean_repo_root(&repo_root)
 }
 
-struct ProofpatchPromptTool;
+struct ProofyloopsPromptTool;
 
 #[async_trait]
-impl Tool for ProofpatchPromptTool {
-    fn description(&self) -> &str {
-        "Extract the (system,user) prompt + excerpt for a lemma (`proofpatch prompt`)."
-    }
-
+impl Tool for ProofyloopsPromptTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -237,7 +237,7 @@ impl Tool for ProofpatchPromptTool {
                 "file": { "type": "string", "description": "File path relative to repo root" },
                 "lemma": { "type": "string", "description": "Lemma name to extract" },
                 "timeout_s": { "type": "integer", "default": 30 },
-                "proofpatch_root": { "type": "string", "description": "Path to proofpatch (defaults to sibling of this crate)" }
+                "proofyloops_root": { "type": "string", "description": "Path to proofyloops (defaults to sibling of this crate)" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -247,7 +247,7 @@ impl Tool for ProofpatchPromptTool {
         let file = extract_string(args, "file")?;
         let lemma = extract_string(args, "lemma")?;
         let repo_root = repo_root_from_args(args)?;
-        // `proofpatch_root` exists only for schema compatibility; we don't use it.
+        // `proofyloops_root` exists only for schema compatibility; we don't use it.
         let _ = extract_u64_opt(args, "timeout_s")?.unwrap_or(30);
         let repo_root = resolve_lean_repo_root(repo_root, Some(&file))?;
         let payload = plc::build_proof_prompt(&repo_root, &file, &lemma)?;
@@ -259,29 +259,25 @@ impl Tool for ProofpatchPromptTool {
 ///
 /// Callers pass `{ "action": "...", "arguments": { ... } }` and we dispatch to the underlying
 /// tool implementations. This keeps the tool list small while preserving capability.
-struct ProofpatchTool;
+struct ProofyloopsTool;
 
 #[async_trait]
-impl Tool for ProofpatchTool {
-    fn description(&self) -> &str {
-        "Unified entrypoint for proofpatch (dispatches to sub-actions)."
-    }
-
+impl Tool for ProofyloopsTool {
     fn schema(&self) -> Value {
         // Discriminated union on `action` so clients can validate arguments.
         let actions: Vec<(&str, Value)> = vec![
-            ("triage_file", ProofpatchTriageFileTool.schema()),
+            ("triage_file", ProofyloopsTriageFileTool.schema()),
             (
                 "tree_search_nearest",
-                ProofpatchTreeSearchNearestTool.schema(),
+                ProofyloopsTreeSearchNearestTool.schema(),
             ),
-            ("context_pack", ProofpatchContextPackTool.schema()),
-            ("verify_summary", ProofpatchVerifySummaryTool.schema()),
-            ("locate_sorries", ProofpatchLocateSorriesTool.schema()),
-            ("patch_nearest", ProofpatchPatchNearestTool.schema()),
-            ("patch_region", ProofpatchPatchRegionTool.schema()),
-            ("smt_probe", ProofpatchSmtProbeTool.schema()),
-            ("smt_repro", ProofpatchSmtReproTool.schema()),
+            ("context_pack", ProofyloopsContextPackTool.schema()),
+            ("verify_summary", ProofyloopsVerifySummaryTool.schema()),
+            ("locate_sorries", ProofyloopsLocateSorriesTool.schema()),
+            ("patch_nearest", ProofyloopsPatchNearestTool.schema()),
+            ("patch_region", ProofyloopsPatchRegionTool.schema()),
+            ("smt_probe", ProofyloopsSmtProbeTool.schema()),
+            ("smt_repro", ProofyloopsSmtReproTool.schema()),
         ];
 
         let mut one_of: Vec<Value> = Vec::new();
@@ -307,7 +303,7 @@ impl Tool for ProofpatchTool {
 
         json!({
             "type": "object",
-            "description": "Unified entrypoint for proofpatch (dispatches to sub-actions). Use action=describe to discover per-action schemas.",
+            "description": "Unified entrypoint for proofyloops (dispatches to sub-actions). Use action=describe to discover per-action schemas.",
             "oneOf": one_of
         })
     }
@@ -320,20 +316,20 @@ impl Tool for ProofpatchTool {
                 // Return action->schema so clients can discover per-action arguments while
                 // keeping the exposed MCP tool list minimal.
                 let schemas = json!({
-                    "describe": ProofpatchTool.schema(),
-                    "triage_file": ProofpatchTriageFileTool.schema(),
-                    "tree_search_nearest": ProofpatchTreeSearchNearestTool.schema(),
-                    "context_pack": ProofpatchContextPackTool.schema(),
-                    "verify_summary": ProofpatchVerifySummaryTool.schema(),
-                    "locate_sorries": ProofpatchLocateSorriesTool.schema(),
-                    "patch_nearest": ProofpatchPatchNearestTool.schema(),
-                    "patch_region": ProofpatchPatchRegionTool.schema(),
-                    "smt_probe": ProofpatchSmtProbeTool.schema(),
-                    "smt_repro": ProofpatchSmtReproTool.schema(),
+                    "describe": ProofyloopsTool.schema(),
+                    "triage_file": ProofyloopsTriageFileTool.schema(),
+                    "tree_search_nearest": ProofyloopsTreeSearchNearestTool.schema(),
+                    "context_pack": ProofyloopsContextPackTool.schema(),
+                    "verify_summary": ProofyloopsVerifySummaryTool.schema(),
+                    "locate_sorries": ProofyloopsLocateSorriesTool.schema(),
+                    "patch_nearest": ProofyloopsPatchNearestTool.schema(),
+                    "patch_region": ProofyloopsPatchRegionTool.schema(),
+                    "smt_probe": ProofyloopsSmtProbeTool.schema(),
+                    "smt_repro": ProofyloopsSmtReproTool.schema(),
                 });
                 Ok(json!({
                     "ok": true,
-                    "kind": "proofpatch_describe",
+                    "kind": "proofyloops_describe",
                     "actions": [
                         "describe",
                         "triage_file",
@@ -354,15 +350,15 @@ impl Tool for ProofpatchTool {
             other => {
                 let canonical = other.replace(['-', '.'], "_");
                 match canonical.as_str() {
-                    "triage_file" => ProofpatchTriageFileTool.call(&sub).await,
-                    "tree_search_nearest" => ProofpatchTreeSearchNearestTool.call(&sub).await,
-                    "context_pack" => ProofpatchContextPackTool.call(&sub).await,
-                    "verify_summary" => ProofpatchVerifySummaryTool.call(&sub).await,
-                    "locate_sorries" => ProofpatchLocateSorriesTool.call(&sub).await,
-                    "patch_nearest" => ProofpatchPatchNearestTool.call(&sub).await,
-                    "patch_region" => ProofpatchPatchRegionTool.call(&sub).await,
-                    "smt_probe" => ProofpatchSmtProbeTool.call(&sub).await,
-                    "smt_repro" => ProofpatchSmtReproTool.call(&sub).await,
+                    "triage_file" => ProofyloopsTriageFileTool.call(&sub).await,
+                    "tree_search_nearest" => ProofyloopsTreeSearchNearestTool.call(&sub).await,
+                    "context_pack" => ProofyloopsContextPackTool.call(&sub).await,
+                    "verify_summary" => ProofyloopsVerifySummaryTool.call(&sub).await,
+                    "locate_sorries" => ProofyloopsLocateSorriesTool.call(&sub).await,
+                    "patch_nearest" => ProofyloopsPatchNearestTool.call(&sub).await,
+                    "patch_region" => ProofyloopsPatchRegionTool.call(&sub).await,
+                    "smt_probe" => ProofyloopsSmtProbeTool.call(&sub).await,
+                    "smt_repro" => ProofyloopsSmtReproTool.call(&sub).await,
                     _ => Err(format!("unknown action: {other}")),
                 }
             }
@@ -370,14 +366,10 @@ impl Tool for ProofpatchTool {
     }
 }
 
-struct ProofpatchSmtProbeTool;
+struct ProofyloopsSmtProbeTool;
 
 #[async_trait]
-impl Tool for ProofpatchSmtProbeTool {
-    fn description(&self) -> &str {
-        "Probe SMT solver availability and capabilities (via smtkit)."
-    }
-
+impl Tool for ProofyloopsSmtProbeTool {
     fn schema(&self) -> Value {
         // Intentionally empty: selection is controlled via `SMTKIT_SOLVER` env var.
         json!({
@@ -406,14 +398,10 @@ impl Tool for ProofpatchSmtProbeTool {
     }
 }
 
-struct ProofpatchSmtReproTool;
+struct ProofyloopsSmtReproTool;
 
 #[async_trait]
-impl Tool for ProofpatchSmtReproTool {
-    fn description(&self) -> &str {
-        "Emit an SMT-LIA repro script (and optional UNSAT proof) from a pp_dump JSON object."
-    }
-
+impl Tool for ProofyloopsSmtReproTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -535,23 +523,19 @@ impl Tool for ProofpatchSmtReproTool {
                 "proof_requested": emit_proof.as_ref().map(|p| p.display().to_string()),
                 "proof_written": proof_written,
             },
-            "smt2": smt2.unwrap_or_else(|| "".to_string()),
+            "smt2": smt2.unwrap_or_default(),
             "proof": match proof {
                 Ok(pf) => pf.unwrap_or(serde_json::Value::Null),
-                Err(e) => json!({"error": format!("{e}")}),
+                Err(e) => json!({"error": e.to_string()}),
             }
         }))
     }
 }
 
-struct ProofpatchVerifyTool;
+struct ProofyloopsVerifyTool;
 
 #[async_trait]
-impl Tool for ProofpatchVerifyTool {
-    fn description(&self) -> &str {
-        "Elaboration-check a file (`proofpatch verify`)."
-    }
-
+impl Tool for ProofyloopsVerifyTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -559,7 +543,7 @@ impl Tool for ProofpatchVerifyTool {
                 "repo_root": { "type": "string" },
                 "file": { "type": "string", "description": "File path relative to repo root" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofpatch_root": { "type": "string" }
+                "proofyloops_root": { "type": "string" }
             },
             "required": ["repo_root", "file"]
         })
@@ -576,14 +560,10 @@ impl Tool for ProofpatchVerifyTool {
     }
 }
 
-struct ProofpatchVerifySummaryTool;
+struct ProofyloopsVerifySummaryTool;
 
 #[async_trait]
-impl Tool for ProofpatchVerifySummaryTool {
-    fn description(&self) -> &str {
-        "Elaboration-check a file, returning a small summary plus raw output (`proofpatch verify`)."
-    }
-
+impl Tool for ProofyloopsVerifySummaryTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -591,7 +571,7 @@ impl Tool for ProofpatchVerifySummaryTool {
                 "repo_root": { "type": "string" },
                 "file": { "type": "string", "description": "File path relative to repo root" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofpatch_root": { "type": "string" }
+                "proofyloops_root": { "type": "string" }
             },
             "required": ["repo_root", "file"]
         })
@@ -610,14 +590,10 @@ impl Tool for ProofpatchVerifySummaryTool {
     }
 }
 
-struct ProofpatchSuggestTool;
+struct ProofyloopsSuggestTool;
 
 #[async_trait]
-impl Tool for ProofpatchSuggestTool {
-    fn description(&self) -> &str {
-        "Suggest a proof by running the configured LLM router (`proofpatch suggest`)."
-    }
-
+impl Tool for ProofyloopsSuggestTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -626,7 +602,7 @@ impl Tool for ProofpatchSuggestTool {
                 "file": { "type": "string" },
                 "lemma": { "type": "string" },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofpatch_root": { "type": "string" }
+                "proofyloops_root": { "type": "string" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -638,10 +614,12 @@ impl Tool for ProofpatchSuggestTool {
         let repo_root = repo_root_from_args(args)?;
         let repo_root = resolve_lean_repo_root(repo_root, Some(&file))?;
         let timeout_s = extract_u64_opt(args, "timeout_s")?.unwrap_or(120);
-        // `proofpatch_root` exists only for schema compatibility; we don't use it.
-        let _ = proofpatch_root_from_args(args)?;
+        // `proofyloops_root` exists only for schema compatibility; we don't use it.
+        let _ = proofyloops_root_from_args(args)?;
 
         let payload = plc::build_proof_prompt(&repo_root, &file, &lemma)?;
+        // Credential discovery belongs to the model request, not prompt construction.
+        plc::load_dotenv_smart(&repo_root);
         let res = plc::llm::chat_completion(
             &payload.system,
             &payload.user,
@@ -660,14 +638,10 @@ impl Tool for ProofpatchSuggestTool {
     }
 }
 
-struct ProofpatchPatchTool;
+struct ProofyloopsPatchTool;
 
 #[async_trait]
-impl Tool for ProofpatchPatchTool {
-    fn description(&self) -> &str {
-        "Patch a lemma’s first `sorry` with provided Lean code, then verify (`proofpatch patch`)."
-    }
-
+impl Tool for ProofyloopsPatchTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -683,7 +657,7 @@ impl Tool for ProofpatchPatchTool {
                     "default": false,
                     "description": "If true, include full verify raw output (can be large)."
                 },
-                "proofpatch_root": { "type": "string" }
+                "proofyloops_root": { "type": "string" }
             },
             "required": ["repo_root", "file", "lemma", "replacement"]
         })
@@ -745,14 +719,10 @@ impl Tool for ProofpatchPatchTool {
     }
 }
 
-struct ProofpatchPatchRegionTool;
+struct ProofyloopsPatchRegionTool;
 
 #[async_trait]
-impl Tool for ProofpatchPatchRegionTool {
-    fn description(&self) -> &str {
-        "Patch the first `sorry` within a (line-based) region and verify (works for instance fields / local blocks)."
-    }
-
+impl Tool for ProofyloopsPatchRegionTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -847,14 +817,10 @@ impl Tool for ProofpatchPatchRegionTool {
     }
 }
 
-struct ProofpatchPatchNearestTool;
+struct ProofyloopsPatchNearestTool;
 
 #[async_trait]
-impl Tool for ProofpatchPatchNearestTool {
-    fn description(&self) -> &str {
-        "Patch the primary/nearest `sorry` in a file (no lemma/line args) and verify."
-    }
-
+impl Tool for ProofyloopsPatchNearestTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -984,14 +950,10 @@ impl Tool for ProofpatchPatchNearestTool {
     }
 }
 
-struct ProofpatchTreeSearchNearestTool;
+struct ProofyloopsTreeSearchNearestTool;
 
 #[async_trait]
-impl Tool for ProofpatchTreeSearchNearestTool {
-    fn description(&self) -> &str {
-        "Beam-search over candidate patches for successive `sorry`s (nearest-first), verifying each node."
-    }
-
+impl Tool for ProofyloopsTreeSearchNearestTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -1058,7 +1020,7 @@ impl Tool for ProofpatchTreeSearchNearestTool {
                 },
                 "research_preset": {
                     "type": "string",
-                    "description": "Optional repo-owned preset name (from <repo_root>/proofpatch.toml). If set, we run the preset and inject its bounded summary into LLM prompts."
+                    "description": "Optional repo-owned preset name (from <repo_root>/proofyloops.toml). If set, we run the preset and inject its bounded summary into LLM prompts."
                 },
                 "research_top_k": {
                     "type": "integer",
@@ -1202,18 +1164,15 @@ impl Tool for ProofpatchTreeSearchNearestTool {
                             .map(|s| s.to_lowercase())
                             .collect();
                         if !must_any_l.is_empty() || !must_all_l.is_empty() {
-                            papers = papers
-                                .into_iter()
-                                .filter(|p| {
-                                    let hay =
-                                        format!("{}\n{}", p.title, p.abstract_text).to_lowercase();
-                                    let ok_any = must_any_l.is_empty()
-                                        || must_any_l.iter().any(|tok| hay.contains(tok));
-                                    let ok_all = must_all_l.is_empty()
-                                        || must_all_l.iter().all(|tok| hay.contains(tok));
-                                    ok_any && ok_all
-                                })
-                                .collect();
+                            papers.retain(|p| {
+                                let hay =
+                                    format!("{}\n{}", p.title, p.abstract_text).to_lowercase();
+                                let ok_any = must_any_l.is_empty()
+                                    || must_any_l.iter().any(|tok| hay.contains(tok));
+                                let ok_all = must_all_l.is_empty()
+                                    || must_all_l.iter().all(|tok| hay.contains(tok));
+                                ok_any && ok_all
+                            });
                         }
                         let ctx = json!({
                             "preset": preset_name,
@@ -1229,10 +1188,7 @@ impl Tool for ProofpatchTreeSearchNearestTool {
                         s.push_str("\nTop sources:\n");
                         for src in notes.sources.iter().take(research_top_k) {
                             let title = src.title.as_deref().unwrap_or("");
-                            let url = src
-                                .canonical_url
-                                .as_deref()
-                                .unwrap_or_else(|| src.url.as_str());
+                            let url = src.canonical_url.as_deref().unwrap_or(src.url.as_str());
                             s.push_str(&format!("- {title} {url}\n"));
                         }
                         research_notes = Some(s);
@@ -1373,7 +1329,7 @@ impl Tool for ProofpatchTreeSearchNearestTool {
                 system.push_str("\n\nResearch notes (external; may be incomplete):\n");
                 system.push_str(&kept);
                 if notes.chars().count() > max_chars {
-                    system.push_str("\n\n[proofpatch: research_notes truncated]\n");
+                    system.push_str("\n\n[proofyloops: research_notes truncated]\n");
                 }
             }
             let res = plc::llm::chat_completion(
@@ -1675,14 +1631,10 @@ impl Tool for ProofpatchTreeSearchNearestTool {
     }
 }
 
-struct ProofpatchLocateSorriesTool;
+struct ProofyloopsLocateSorriesTool;
 
 #[async_trait]
-impl Tool for ProofpatchLocateSorriesTool {
-    fn description(&self) -> &str {
-        "Locate `sorry` tokens in a file with line/col and suggested patch regions."
-    }
-
+impl Tool for ProofyloopsLocateSorriesTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -1714,14 +1666,10 @@ impl Tool for ProofpatchLocateSorriesTool {
     }
 }
 
-struct ProofpatchContextPackTool;
+struct ProofyloopsContextPackTool;
 
 #[async_trait]
-impl Tool for ProofpatchContextPackTool {
-    fn description(&self) -> &str {
-        "Build a JSON-first context pack for a file + decl/line (imports + excerpt + nearby decls)."
-    }
-
+impl Tool for ProofyloopsContextPackTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -1764,14 +1712,10 @@ impl Tool for ProofpatchContextPackTool {
     }
 }
 
-struct ProofpatchTriageFileTool;
+struct ProofyloopsTriageFileTool;
 
 #[async_trait]
-impl Tool for ProofpatchTriageFileTool {
-    fn description(&self) -> &str {
-        "Triage a file: verify_summary + locate_sorries, plus nearest sorry to first error (if any)."
-    }
-
+impl Tool for ProofyloopsTriageFileTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -1835,7 +1779,6 @@ impl Tool for ProofpatchTriageFileTool {
         let output_path = extract_string_opt(args, "output_path");
 
         let repo_root = resolve_lean_repo_root(repo_root, Some(&file))?;
-        plc::load_dotenv_smart(&repo_root);
 
         let raw =
             plc::verify_lean_file(&repo_root, &file, StdDuration::from_secs(timeout_s)).await?;
@@ -1963,12 +1906,16 @@ impl Tool for ProofpatchTriageFileTool {
                 .and_then(|v| v.get("line"))
                 .and_then(|v| v.as_u64());
 
-            if has_error {
+            if summary.get("timeout").and_then(|v| v.as_bool()) == Some(true) {
+                json!({ "kind": "retry_verification", "reason": "timeout" })
+            } else if has_error {
                 json!({
                     "kind": "fix_first_error",
                     "prompt": rubberduck_prompt_first_error,
                     "line": first_error_line,
                 })
+            } else if summary.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                json!({ "kind": "inspect_verification_failure" })
             } else if selected_sorry.is_some() {
                 json!({
                     "kind": "patch_nearest_sorry",
@@ -2045,17 +1992,17 @@ fn apply_mechanical_fixes_for_first_error(
 
     // Heuristic 1: if Lean suggests `ring_nf`, replace a nearby `ring` with `ring_nf`.
     if msg.contains("ring_nf") {
-        for i0 in start0..=end0 {
-            let ln = &lines[i0];
+        for (i0, ln) in lines.iter_mut().enumerate().take(end0 + 1).skip(start0) {
             if ln.trim() == "ring" {
                 let before = ln.clone();
                 let indent: String = ln.chars().take_while(|c| c.is_whitespace()).collect();
-                lines[i0] = format!("{indent}ring_nf");
+                let after = format!("{indent}ring_nf");
+                *ln = after.clone();
                 edits.push(json!({
                     "kind": "replace_tactic",
                     "line": i0 + 1,
                     "before": before,
-                    "after": lines[i0],
+                    "after": after,
                     "note": "Lean suggested ring_nf; replaced nearby `ring` with `ring_nf`.",
                 }));
                 break;
@@ -2109,127 +2056,6 @@ fn apply_mechanical_fixes_for_first_error(
     (out, edits)
 }
 
-fn first_error_snippet(stdout: &str, stderr: &str, max_lines: usize) -> Option<String> {
-    fn from_text(txt: &str, max_lines: usize) -> Option<String> {
-        let lines: Vec<&str> = txt.lines().collect();
-        let i0 = lines.iter().position(|l| l.contains(": error:"))?;
-        let end = usize::min(lines.len(), i0 + max_lines.max(1));
-        Some(lines[i0..end].join("\n"))
-    }
-
-    from_text(stdout, max_lines).or_else(|| from_text(stderr, max_lines))
-}
-
-struct ProofpatchAgentStepTool;
-
-#[async_trait]
-impl Tool for ProofpatchAgentStepTool {
-    fn description(&self) -> &str {
-        "Execute one safe agent step (no LLM): verify → apply mechanical fix → verify."
-    }
-
-    fn schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "repo_root": { "type": "string" },
-                "file": { "type": "string" },
-                "timeout_s": { "type": "integer", "default": 180 },
-                "write": { "type": "boolean", "default": false, "description": "If true, write edits back to the file. Otherwise verifies against a temp file." },
-                "output_path": { "type": "string", "description": "Optional path to write full JSON output; response becomes a small summary." }
-            },
-            "required": ["repo_root", "file"]
-        })
-    }
-
-    async fn call(&self, args: &Value) -> Result<Value, String> {
-        let file = extract_string(args, "file")?;
-        let repo_root = repo_root_from_args(args)?;
-        let timeout_s = extract_u64_opt(args, "timeout_s")?.unwrap_or(180);
-        let write = args.get("write").and_then(|v| v.as_bool()).unwrap_or(false);
-        let output_path = extract_string_opt(args, "output_path");
-
-        let repo_root = resolve_lean_repo_root(repo_root, Some(&file))?;
-        plc::load_dotenv_smart(&repo_root);
-
-        let abs = repo_root.join(&file);
-        if !abs.exists() {
-            return Err(format!("File not found: {}", abs.display()));
-        }
-        let original_text =
-            std::fs::read_to_string(&abs).map_err(|e| format!("read {}: {e}", abs.display()))?;
-
-        let verify0 =
-            plc::verify_lean_file(&repo_root, &file, StdDuration::from_secs(timeout_s)).await?;
-        let first_error_loc = plc::parse_first_error_loc(&verify0.stdout, &verify0.stderr);
-        let first_error_text = first_error_snippet(&verify0.stdout, &verify0.stderr, 12);
-
-        let (patched_text, edits) = apply_mechanical_fixes_for_first_error(
-            &original_text,
-            first_error_loc.as_ref().map(|l| l.line),
-            first_error_text.as_deref(),
-        );
-
-        let wrote_file = if write && !edits.is_empty() {
-            std::fs::write(&abs, patched_text.as_bytes())
-                .map_err(|e| format!("write {}: {e}", abs.display()))?;
-            Some(abs.display().to_string())
-        } else {
-            None
-        };
-
-        let verify1 = if write && !edits.is_empty() {
-            plc::verify_lean_file(&repo_root, &file, StdDuration::from_secs(timeout_s)).await?
-        } else {
-            plc::verify_lean_text(&repo_root, &patched_text, StdDuration::from_secs(timeout_s))
-                .await?
-        };
-
-        let dag = json!({
-            "nodes": [
-                { "id": "verify0", "kind": "verify", "ok": verify0.ok, "returncode": verify0.returncode, "first_error_loc": first_error_loc, "first_error": first_error_text },
-                { "id": "mech_fix1", "kind": "mechanical_fix", "applied": !edits.is_empty(), "edits": edits, "write": write },
-                { "id": "verify1", "kind": "verify", "ok": verify1.ok, "returncode": verify1.returncode, "first_error_loc": plc::parse_first_error_loc(&verify1.stdout, &verify1.stderr), "first_error": verify1.stdout.lines().find(|l| l.contains(": error:")) }
-            ],
-            "edges": [
-                { "from": "verify0", "to": "mech_fix1" },
-                { "from": "mech_fix1", "to": "verify1" }
-            ]
-        });
-
-        let full = json!({
-            "ok": true,
-            "repo_root": repo_root.display().to_string(),
-            "file": file,
-            "written_file": wrote_file,
-            "dag": dag
-        });
-
-        if let Some(p) = output_path {
-            let path = std::path::PathBuf::from(&p);
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("failed to create output dir {}: {}", parent.display(), e)
-                })?;
-            }
-            let s = serde_json::to_string_pretty(&full)
-                .map_err(|e| format!("failed to encode json: {}", e))?;
-            std::fs::write(&path, s.as_bytes())
-                .map_err(|e| format!("failed to write {}: {}", path.display(), e))?;
-
-            return Ok(json!({
-                "ok": true,
-                "written_path": path.display().to_string(),
-                "file": file,
-                "written_file": wrote_file,
-                "verify1_ok": verify1.ok
-            }));
-        }
-
-        Ok(full)
-    }
-}
-
 fn escape_html(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -2245,14 +2071,10 @@ fn escape_html(s: &str) -> String {
     out
 }
 
-struct ProofpatchReportHtmlTool;
+struct ProofyloopsReportHtmlTool;
 
 #[async_trait]
-impl Tool for ProofpatchReportHtmlTool {
-    fn description(&self) -> &str {
-        "Triage many files and write a small HTML report."
-    }
-
+impl Tool for ProofyloopsReportHtmlTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -2299,7 +2121,7 @@ impl Tool for ProofpatchReportHtmlTool {
             files.push(s.to_string());
         }
 
-        let repo_root = resolve_lean_repo_root(repo_root, files.get(0).map(|s| s.as_str()))?;
+        let repo_root = resolve_lean_repo_root(repo_root, files.first().map(|s| s.as_str()))?;
         plc::load_dotenv_smart(&repo_root);
 
         let mut items: Vec<Value> = Vec::with_capacity(files.len());
@@ -2340,7 +2162,7 @@ impl Tool for ProofpatchReportHtmlTool {
         let report_path = match output_path {
             Some(p) => std::path::PathBuf::from(p),
             None => std::env::temp_dir()
-                .join(format!("proofpatch-report-{}.html", uuid::Uuid::new_v4())),
+                .join(format!("proofyloops-report-{}.html", uuid::Uuid::new_v4())),
         };
         if let Some(parent) = report_path.parent() {
             std::fs::create_dir_all(parent)
@@ -2349,12 +2171,12 @@ impl Tool for ProofpatchReportHtmlTool {
 
         let mut html = String::new();
         html.push_str("<!doctype html>\n<html><head><meta charset=\"utf-8\"/>\n");
-        html.push_str("<title>proofpatch report</title>\n");
+        html.push_str("<title>proofyloops report</title>\n");
         html.push_str(
             "<style>body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:1200px;margin:24px auto;padding:0 16px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;vertical-align:top}th{background:#f6f6f6;text-align:left}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\"Liberation Mono\",monospace}pre{white-space:pre-wrap}</style>\n",
         );
         html.push_str("</head><body>\n");
-        html.push_str("<h2>proofpatch report</h2>\n");
+        html.push_str("<h2>proofyloops report</h2>\n");
         html.push_str(&format!(
             "<p><b>repo_root</b>: <code>{}</code></p>\n",
             escape_html(&repo_root.display().to_string())
@@ -2427,14 +2249,10 @@ impl Tool for ProofpatchReportHtmlTool {
     }
 }
 
-struct ProofpatchRubberduckPromptTool;
+struct ProofyloopsRubberduckPromptTool;
 
 #[async_trait]
-impl Tool for ProofpatchRubberduckPromptTool {
-    fn description(&self) -> &str {
-        "Build a rubberduck/ideation prompt for a lemma (no proof code; plan + next moves)."
-    }
-
+impl Tool for ProofyloopsRubberduckPromptTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -2443,7 +2261,7 @@ impl Tool for ProofpatchRubberduckPromptTool {
                 "file": { "type": "string" },
                 "lemma": { "type": "string" },
                 "diagnostics": { "type": "string", "description": "Optional Lean output/error context to include (raw stdout/stderr excerpt or JSON)" },
-                "proofpatch_root": { "type": "string" }
+                "proofyloops_root": { "type": "string" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -2460,14 +2278,10 @@ impl Tool for ProofpatchRubberduckPromptTool {
     }
 }
 
-struct ProofpatchLoopTool;
+struct ProofyloopsLoopTool;
 
 #[async_trait]
-impl Tool for ProofpatchLoopTool {
-    fn description(&self) -> &str {
-        "Bounded loop: suggest → patch first `sorry` in lemma → verify (`proofpatch loop`)."
-    }
-
+impl Tool for ProofyloopsLoopTool {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
@@ -2477,7 +2291,7 @@ impl Tool for ProofpatchLoopTool {
                 "lemma": { "type": "string" },
                 "max_iters": { "type": "integer", "default": 3 },
                 "timeout_s": { "type": "integer", "default": 120 },
-                "proofpatch_root": { "type": "string" }
+                "proofyloops_root": { "type": "string" }
             },
             "required": ["repo_root", "file", "lemma"]
         })
@@ -2491,7 +2305,7 @@ impl Tool for ProofpatchLoopTool {
         let timeout_s = extract_u64_opt(args, "timeout_s")?.unwrap_or(120);
 
         // Rust-native loop for suggest + patch + verify.
-        let _ = proofpatch_root_from_args(args)?;
+        let _ = proofyloops_root_from_args(args)?;
         let repo_root = resolve_lean_repo_root(repo_root, Some(&file))?;
         plc::load_dotenv_smart(&repo_root);
 
@@ -2636,7 +2450,7 @@ struct PromptArgs {
     timeout_s: Option<u64>,
     // Schema compatibility only (unused).
     #[serde(default)]
-    proofpatch_root: Option<String>,
+    proofyloops_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -2647,7 +2461,7 @@ struct VerifyArgs {
     timeout_s: Option<u64>,
     // Schema compatibility only (unused).
     #[serde(default)]
-    proofpatch_root: Option<String>,
+    proofyloops_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -2681,7 +2495,7 @@ struct PatchArgs {
     timeout_s: Option<u64>,
     // Schema compatibility only (unused).
     #[serde(default)]
-    proofpatch_root: Option<String>,
+    proofyloops_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -2693,7 +2507,7 @@ struct SuggestArgs {
     timeout_s: Option<u64>,
     // Schema compatibility only (unused).
     #[serde(default)]
-    proofpatch_root: Option<String>,
+    proofyloops_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -2705,7 +2519,7 @@ struct RubberduckArgs {
     diagnostics: Option<String>,
     // Schema compatibility only (unused).
     #[serde(default)]
-    proofpatch_root: Option<String>,
+    proofyloops_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -2719,7 +2533,7 @@ struct LoopArgs {
     timeout_s: Option<u64>,
     // Schema compatibility only (unused).
     #[serde(default)]
-    proofpatch_root: Option<String>,
+    proofyloops_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -2739,39 +2553,31 @@ struct ReportHtmlArgs {
 }
 
 #[derive(Clone)]
-struct ProofpatchStdioMcp {
-    tool_router: RmcpToolRouter<Self>,
-}
+struct ProofyloopsStdioMcp;
 
-impl ProofpatchStdioMcp {
+impl ProofyloopsStdioMcp {
     fn new() -> Self {
-        Self {
-            tool_router: Self::tool_router(),
-        }
+        Self
     }
 }
 
 #[derive(Clone)]
-struct ProofpatchStdioMcpMinimal {
-    tool_router: RmcpToolRouter<Self>,
-}
+struct ProofyloopsStdioMcpMinimal;
 
-impl ProofpatchStdioMcpMinimal {
+impl ProofyloopsStdioMcpMinimal {
     fn new() -> Self {
-        Self {
-            tool_router: Self::tool_router(),
-        }
+        Self
     }
 }
 
 #[tool_router]
-impl ProofpatchStdioMcpMinimal {
-    #[tool(description = "Unified proofpatch entrypoint (dispatches to sub-actions)")]
-    async fn proofpatch(
+impl ProofyloopsStdioMcpMinimal {
+    #[tool(description = "Unified proofyloops entrypoint (dispatches to sub-actions)")]
+    async fn proofyloops(
         &self,
         params: Parameters<UnifiedArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchTool;
+        let tool = ProofyloopsTool;
         let v = serde_json::json!({
             "action": params.0.action,
             "arguments": params.0.arguments,
@@ -2787,9 +2593,9 @@ impl ProofpatchStdioMcpMinimal {
 }
 
 #[tool_router]
-impl ProofpatchStdioMcp {
+impl ProofyloopsStdioMcp {
     #[tool(description = "Triage a file: verify_summary + locate_sorries")]
-    async fn proofpatch_triage_file(
+    async fn proofyloops_triage_file(
         &self,
         params: Parameters<RepoFileSorriesArgs>,
     ) -> Result<CallToolResult, McpError> {
@@ -2809,7 +2615,6 @@ impl ProofpatchStdioMcp {
 
         let repo_root = resolve_lean_repo_root(repo_root, Some(&file))
             .map_err(|e| McpError::invalid_params(e, None))?;
-        plc::load_dotenv_smart(&repo_root);
 
         let raw = plc::verify_lean_file(&repo_root, &file, StdDuration::from_secs(timeout_s))
             .await
@@ -2940,12 +2745,16 @@ impl ProofpatchStdioMcp {
                 .and_then(|v| v.get("line"))
                 .and_then(|v| v.as_u64());
 
-            if has_error {
+            if summary.get("timeout").and_then(|v| v.as_bool()) == Some(true) {
+                json!({ "kind": "retry_verification", "reason": "timeout" })
+            } else if has_error {
                 serde_json::json!({
                     "kind": "fix_first_error",
                     "prompt": rubberduck_prompt_first_error,
                     "line": first_error_line,
                 })
+            } else if summary.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                json!({ "kind": "inspect_verification_failure" })
             } else if nearest.is_some() {
                 serde_json::json!({
                     "kind": "patch_nearest_sorry",
@@ -3010,7 +2819,7 @@ impl ProofpatchStdioMcp {
     }
 
     // ---------------------------------------------------------------------
-    // Thin stdio wrappers for the rest of the proofpatch tool surface.
+    // Thin stdio wrappers for the rest of the proofyloops tool surface.
     //
     // These delegate to the Tool implementations above for behavioral consistency.
     //
@@ -3019,13 +2828,13 @@ impl ProofpatchStdioMcp {
     // ---------------------------------------------------------------------
 
     #[tool(
-        description = "Extract the (system,user) prompt + excerpt for a lemma (`proofpatch prompt`)."
+        description = "Extract the (system,user) prompt + excerpt for a lemma (`proofyloops prompt`)."
     )]
-    async fn proofpatch_prompt(
+    async fn proofyloops_prompt(
         &self,
         params: Parameters<PromptArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchPromptTool;
+        let tool = ProofyloopsPromptTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3037,12 +2846,12 @@ impl ProofpatchStdioMcp {
         )]))
     }
 
-    #[tool(description = "Elaboration-check a file (`proofpatch verify`).")]
-    async fn proofpatch_verify(
+    #[tool(description = "Elaboration-check a file (`proofyloops verify`).")]
+    async fn proofyloops_verify(
         &self,
         params: Parameters<VerifyArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchVerifyTool;
+        let tool = ProofyloopsVerifyTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3055,13 +2864,13 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(
-        description = "Elaboration-check a file, returning a small summary plus raw output (`proofpatch verify`)."
+        description = "Elaboration-check a file, returning a small summary plus raw output (`proofyloops verify`)."
     )]
-    async fn proofpatch_verify_summary(
+    async fn proofyloops_verify_summary(
         &self,
         params: Parameters<VerifyArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchVerifySummaryTool;
+        let tool = ProofyloopsVerifySummaryTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3076,11 +2885,11 @@ impl ProofpatchStdioMcp {
     #[tool(
         description = "Locate `sorry` tokens in a file with line/col and suggested patch regions."
     )]
-    async fn proofpatch_locate_sorries(
+    async fn proofyloops_locate_sorries(
         &self,
         params: Parameters<LocateSorriesArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchLocateSorriesTool;
+        let tool = ProofyloopsLocateSorriesTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3093,13 +2902,13 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(
-        description = "Suggest a proof by running the configured LLM router (`proofpatch suggest`)."
+        description = "Suggest a proof by running the configured LLM router (`proofyloops suggest`)."
     )]
-    async fn proofpatch_suggest(
+    async fn proofyloops_suggest(
         &self,
         params: Parameters<SuggestArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchSuggestTool;
+        let tool = ProofyloopsSuggestTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3112,13 +2921,13 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(
-        description = "Patch a lemma’s first `sorry` with provided Lean code, then verify (`proofpatch patch`)."
+        description = "Patch a lemma’s first `sorry` with provided Lean code, then verify (`proofyloops patch`)."
     )]
-    async fn proofpatch_patch(
+    async fn proofyloops_patch(
         &self,
         params: Parameters<PatchArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchPatchTool;
+        let tool = ProofyloopsPatchTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3131,11 +2940,11 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(description = "Patch the first `sorry` within a (line-based) region and verify.")]
-    async fn proofpatch_patch_region(
+    async fn proofyloops_patch_region(
         &self,
         params: Parameters<PatchRegionArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchPatchRegionTool;
+        let tool = ProofyloopsPatchRegionTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3150,11 +2959,11 @@ impl ProofpatchStdioMcp {
     #[tool(
         description = "Build a rubberduck/ideation prompt for a lemma (no proof code; plan + next moves)."
     )]
-    async fn proofpatch_rubberduck_prompt(
+    async fn proofyloops_rubberduck_prompt(
         &self,
         params: Parameters<RubberduckArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchRubberduckPromptTool;
+        let tool = ProofyloopsRubberduckPromptTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3167,13 +2976,13 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(
-        description = "Bounded loop: suggest → patch first `sorry` in lemma → verify (`proofpatch loop`)."
+        description = "Bounded loop: suggest → patch first `sorry` in lemma → verify (`proofyloops loop`)."
     )]
-    async fn proofpatch_loop(
+    async fn proofyloops_loop(
         &self,
         params: Parameters<LoopArgs>,
     ) -> Result<CallToolResult, McpError> {
-        let tool = ProofpatchLoopTool;
+        let tool = ProofyloopsLoopTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3186,7 +2995,7 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(description = "Execute one safe agent step (no LLM): verify → mechanical fix → verify")]
-    async fn proofpatch_agent_step(
+    async fn proofyloops_agent_step(
         &self,
         params: Parameters<AgentStepArgs>,
     ) -> Result<CallToolResult, McpError> {
@@ -3300,7 +3109,7 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(description = "Build a JSON-first context pack for file + decl/line")]
-    async fn proofpatch_context_pack(
+    async fn proofyloops_context_pack(
         &self,
         params: Parameters<ContextPackArgs>,
     ) -> Result<CallToolResult, McpError> {
@@ -3336,12 +3145,12 @@ impl ProofpatchStdioMcp {
     }
 
     #[tool(description = "Triage many files and write a small HTML report")]
-    async fn proofpatch_report_html(
+    async fn proofyloops_report_html(
         &self,
         params: Parameters<ReportHtmlArgs>,
     ) -> Result<CallToolResult, McpError> {
         // Delegate to the existing Tool implementation to avoid duplicating report logic.
-        let tool = ProofpatchReportHtmlTool;
+        let tool = ProofyloopsReportHtmlTool;
         let v = serde_json::to_value(&params.0)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let out = tool
@@ -3355,31 +3164,31 @@ impl ProofpatchStdioMcp {
 }
 
 #[tool_handler]
-impl rmcp::ServerHandler for ProofpatchStdioMcp {
+impl rmcp::ServerHandler for ProofyloopsStdioMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(
                 // What clients should display as the server name.
                 // (Default is the rmcp framework name, which is misleading for debugging.)
-                Implementation::new("proofpatch-mcp", env!("CARGO_PKG_VERSION"))
-                    .with_title("proofpatch-mcp"),
+                Implementation::new("proofyloops-mcp", env!("CARGO_PKG_VERSION"))
+                    .with_title("proofyloops-mcp"),
             )
             .with_instructions(
-                "Tools for Lean proof triage/patching loops (proofpatch). JSON-only, stdout reserved for MCP frames.",
+                "Tools for Lean proof triage/patching loops (proofyloops). JSON-only, stdout reserved for MCP frames.",
             )
     }
 }
 
 #[tool_handler]
-impl rmcp::ServerHandler for ProofpatchStdioMcpMinimal {
+impl rmcp::ServerHandler for ProofyloopsStdioMcpMinimal {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(
-                Implementation::new("proofpatch-mcp", env!("CARGO_PKG_VERSION"))
-                    .with_title("proofpatch-mcp"),
+                Implementation::new("proofyloops-mcp", env!("CARGO_PKG_VERSION"))
+                    .with_title("proofyloops-mcp"),
             )
             .with_instructions(
-                "Tools for Lean proof triage/patching loops (proofpatch). Minimal tool surface.",
+                "Tools for Lean proof triage/patching loops (proofyloops). Minimal tool surface.",
             )
     }
 }
@@ -3392,26 +3201,26 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let arg1 = std::env::args().nth(1);
     if matches!(arg1.as_deref(), Some("-h" | "--help" | "help")) {
-        println!("proofpatch-mcp");
+        println!("proofyloops-mcp");
         println!();
         println!("Usage:");
-        println!("  proofpatch-mcp              # stdio MCP server (default)");
+        println!("  proofyloops-mcp              # stdio MCP server (default)");
         println!();
         println!("Env:");
-        println!("  PROOFPATCH_MCP_TOOLSET=minimal|full");
+        println!("  PROOFYLOOPS_MCP_TOOLSET=minimal|full");
         return Ok(());
     }
     if matches!(arg1.as_deref(), Some("-V" | "--version" | "version")) {
-        println!("proofpatch-mcp {}", env!("CARGO_PKG_VERSION"));
+        println!("proofyloops-mcp {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
 
-    let toolset = std::env::var("PROOFPATCH_MCP_TOOLSET")
+    let toolset = plc::environment::var("PROOFYLOOPS_MCP_TOOLSET")
         .unwrap_or_else(|_| "minimal".to_string())
         .trim()
         .to_lowercase();
     if toolset == "minimal" || toolset.is_empty() {
-        let service = ProofpatchStdioMcpMinimal::new();
+        let service = ProofyloopsStdioMcpMinimal::new();
         let running = service
             .serve(stdio())
             .await
@@ -3421,7 +3230,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|e| format!("stdio MCP server task join failed: {e:?}"))?;
     } else {
-        let service = ProofpatchStdioMcp::new();
+        let service = ProofyloopsStdioMcp::new();
         let running = service
             .serve(stdio())
             .await
@@ -3459,7 +3268,7 @@ mod tests {
 
     #[test]
     fn resolve_lean_repo_root_can_anchor_on_file_inside_subdir_repo() {
-        let base = std::env::temp_dir().join(format!("proofpatch-test-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("proofyloops-test-{}", uuid::Uuid::new_v4()));
         let ws_root = base.join("ws");
         let lean_root = ws_root.join("leanproj");
         let file_abs = lean_root.join("Some").join("File.lean");

@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-pp-lean-verify: thin wrapper around `proofpatch verify-summary`.
+pp-lean-verify: thin wrapper around `proofyloops verify-summary`.
 
 Usage:
   pp-lean-verify --repo <lean_repo_root_or_any_parent> --file <relpath> [--timeout-s N] [--raw]
@@ -37,14 +37,18 @@ if [[ -z "${REPO}" || -z "${FILE}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROOFPATCH_BIN="${PROOFPATCH_BIN:-}"
-
-if [[ -z "${PROOFPATCH_BIN}" ]]; then
-  if [[ -x "${ROOT}/target/debug/proofpatch" ]]; then
-    PROOFPATCH_BIN="${ROOT}/target/debug/proofpatch"
-  else
-    PROOFPATCH_BIN="cargo run --quiet -p proofpatch-core --bin proofpatch --"
-  fi
+PROOFYLOOPS_BIN="${PROOFYLOOPS_BIN:-${PROOFPATCH_BIN:-}}"
+if [[ -n "${PROOFYLOOPS_BIN}" ]]; then
+  # Overrides are executable paths, not shell snippets. Keeping the command in
+  # an array preserves spaces in both the executable and the forwarded args.
+  PROOFYLOOPS_CMD=("${PROOFYLOOPS_BIN}")
+elif [[ -x "${ROOT}/target/debug/proofyloops" ]]; then
+  PROOFYLOOPS_CMD=("${ROOT}/target/debug/proofyloops")
+else
+  PROOFYLOOPS_CMD=(
+    cargo run --quiet --manifest-path "${ROOT}/proofyloops-cli/Cargo.toml"
+    -p proofyloops --bin proofyloops --
+  )
 fi
 
 ARGS=(verify-summary --repo "${REPO}" --file "${FILE}")
@@ -56,10 +60,7 @@ if [[ "${RAW}" -eq 1 ]]; then
 fi
 
 if command -v jq >/dev/null 2>&1; then
-  # shellcheck disable=SC2086
-  ${PROOFPATCH_BIN} "${ARGS[@]}" | jq .
+  "${PROOFYLOOPS_CMD[@]}" "${ARGS[@]}" | jq .
 else
-  # shellcheck disable=SC2086
-  ${PROOFPATCH_BIN} "${ARGS[@]}"
+  "${PROOFYLOOPS_CMD[@]}" "${ARGS[@]}"
 fi
-
