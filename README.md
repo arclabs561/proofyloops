@@ -2,6 +2,11 @@
 
 `proofyloops` is a CLI + MCP server for **debuggable Lean 4 workflows**: verify, locate `sorry`s, extract bounded context packs, and (optionally) call an OpenAI-compatible LLM.
 
+For tactic-level proof search or dataset extraction, use Pantograph or
+LeanDojo; for an MCP view of Lean's language server (goals, diagnostics,
+hovers), use lean-lsp-mcp. proofyloops works one level up, on files and
+declarations: build them, find their `sorry`s, and patch them.
+
 ### Design
 
 - **Target-agnostic**: point at a Lean repo with `--repo`, then target a file/decl/region inside it.
