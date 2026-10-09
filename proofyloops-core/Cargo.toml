@@ -24,7 +24,7 @@ hex = "0.4.3"
 schemars = { version = "1.2.0", features = ["derive"] }
 toml = "0.8"
 proofyloops-lean-embed = { version = "0.1.0", path = "../proofyloops-lean-embed", optional = true }
-similar = "2"
+similar = "3"
 lsp-types = { version = "0.97.0", optional = true }
 url = { version = "2.5.4", optional = true }
 smtkit = "0.1.0"
