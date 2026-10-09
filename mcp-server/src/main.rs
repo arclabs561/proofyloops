@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use proofyloops_core as plc;
 use rmcp::{
     handler::server::wrapper::Parameters,
-    model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo},
+    model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
     transport::stdio,
     ErrorData as McpError, ServiceExt,
@@ -2586,7 +2586,7 @@ impl ProofyloopsStdioMcpMinimal {
             .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2808,12 +2808,12 @@ impl ProofyloopsStdioMcp {
                 "sorries": locs.len(),
                 "next_action": full.get("next_action").cloned().unwrap_or(serde_json::Value::Null),
             });
-            return Ok(CallToolResult::success(vec![Content::text(
+            return Ok(CallToolResult::success(vec![ContentBlock::text(
                 small.to_string(),
             )]));
         }
 
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             full.to_string(),
         )]))
     }
@@ -2841,7 +2841,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2858,7 +2858,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2877,7 +2877,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2896,7 +2896,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2915,7 +2915,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2934,7 +2934,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2951,7 +2951,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2970,7 +2970,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::invalid_params(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -2989,7 +2989,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -3098,12 +3098,12 @@ impl ProofyloopsStdioMcp {
                 "written_file": wrote_file,
                 "verify1_ok": verify1.ok
             });
-            return Ok(CallToolResult::success(vec![Content::text(
+            return Ok(CallToolResult::success(vec![ContentBlock::text(
                 small.to_string(),
             )]));
         }
 
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             full.to_string(),
         )]))
     }
@@ -3139,7 +3139,7 @@ impl ProofyloopsStdioMcp {
         let out = serde_json::to_value(pack).map_err(|e| {
             McpError::internal_error(format!("failed to serialize context pack: {e}"), None)
         })?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
@@ -3157,7 +3157,7 @@ impl ProofyloopsStdioMcp {
             .call(&v)
             .await
             .map_err(|e| McpError::internal_error(e, None))?;
-        Ok(CallToolResult::success(vec![Content::text(
+        Ok(CallToolResult::success(vec![ContentBlock::text(
             out.to_string(),
         )]))
     }
