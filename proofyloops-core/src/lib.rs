@@ -23,6 +23,7 @@
 //! - Endpoint, proxy, and CA variables (`*_BASE_URL`, `*_HOST`, `*_PROXY`, ...) are read
 //!   only from the real environment, never from a repo `.env`.
 //!
+#![doc = include_str!("../README.md")]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 // (no extra imports needed for LSP backend)
@@ -469,7 +470,7 @@ pub fn attach_research_matches_to_next_actions(
 
         scored.sort_by(|(ia, sa, a), (ib, sb, b)| {
             ib.cmp(ia)
-                .then_with(|| sb.partial_cmp(sa).unwrap_or(std::cmp::Ordering::Equal))
+                .then_with(|| sb.total_cmp(sa))
                 .then_with(|| a.url.cmp(&b.url))
         });
 
