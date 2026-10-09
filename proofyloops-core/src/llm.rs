@@ -96,16 +96,14 @@ fn providers_from_env() -> Vec<Provider> {
 }
 
 fn provider_order() -> Vec<String> {
-    for k in ["PROOFYLOOPS_PROVIDER_ORDER"] {
-        if let Ok(v) = crate::environment::var(k) {
-            let v = v.trim().to_string();
-            if !v.is_empty() {
-                return v
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect();
-            }
+    if let Ok(v) = crate::environment::var("PROOFYLOOPS_PROVIDER_ORDER") {
+        let v = v.trim().to_string();
+        if !v.is_empty() {
+            return v
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
         }
     }
     vec![

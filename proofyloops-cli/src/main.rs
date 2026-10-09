@@ -2081,7 +2081,7 @@ fn main() -> Result<(), String> {
 
                                 let score = pp_dump
                                     .as_ref()
-                                    .and_then(&score_from_pp_dump)
+                                    .and_then(score_from_pp_dump)
                                     .unwrap_or(serde_json::Value::Null);
                                 let delta = if score.is_null() {
                                     serde_json::Value::Null
@@ -2151,7 +2151,7 @@ fn main() -> Result<(), String> {
                             let t = r
                                 .get("progress")
                                 .and_then(|p| p.get("score"))
-                                .and_then(&tuple_from_score)
+                                .and_then(tuple_from_score)
                                 .filter(|v| v.len() == 3);
                             let Some(tuple) = t else { continue };
                             let improves = r
@@ -2240,7 +2240,7 @@ fn main() -> Result<(), String> {
                             let hint_tuple = best_progress
                                 .get("progress")
                                 .and_then(|p| p.get("score"))
-                                .and_then(&tuple_from_score)
+                                .and_then(tuple_from_score)
                                 .unwrap_or_else(|| vec![u64::MAX, u64::MAX, u64::MAX]);
                             next_frontier.push((ns, hint_tuple, best_progress));
                         }
