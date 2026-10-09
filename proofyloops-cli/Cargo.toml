@@ -17,7 +17,7 @@ proofyloops-lean-embed = { version = "0.1.0", path = "../proofyloops-lean-embed"
  serde_json = "1.0"
  tempfile = "3.10"
  tokio = { version = "1", features = ["process", "time", "rt-multi-thread", "macros"] }
- similar = "2"
+ similar = "3"
  schemars = { version = "1.2.0", features = ["derive"] }
 smtkit = "0.1.0"
 sha2 = "0.10"
