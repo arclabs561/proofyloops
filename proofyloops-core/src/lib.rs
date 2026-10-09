@@ -20,6 +20,8 @@
 //!   - `GROQ_API_KEY` and `GROQ_MODEL`
 //!   - `OPENAI_API_KEY` and `OPENAI_MODEL` (+ optional `OPENAI_BASE_URL`)
 //!   - `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (+ optional `OPENROUTER_BASE_URL`)
+//! - Endpoint, proxy, and CA variables (`*_BASE_URL`, `*_HOST`, `*_PROXY`, ...) are read
+//!   only from the real environment, never from a repo `.env`.
 //!
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -740,13 +742,41 @@ pub fn parse_dotenv(path: &Path) -> HashMap<String, String> {
     out
 }
 
-pub fn load_dotenv_if_present(repo_root: &Path) {
-    let p = repo_root.join(".env");
-    for (k, v) in parse_dotenv(&p) {
+/// Whether a variable from a dotenv file may enter the process environment.
+///
+/// Dotenv files come from the target repo (or its siblings), which a long-lived
+/// server must treat as untrusted. Variables that choose where requests go or
+/// which TLS roots are trusted would let such a file send the user's own API
+/// key to another host, so they are only honored from the real environment.
+fn dotenv_var_allowed(key: &str) -> bool {
+    let k = key.to_ascii_uppercase();
+    let routing_suffix = ["_BASE_URL", "_API_BASE", "_HOST", "_ENDPOINT", "_PROXY"]
+        .iter()
+        .any(|suffix| k.ends_with(suffix));
+    let routing_name = matches!(
+        k.as_str(),
+        "SSL_CERT_FILE" | "SSL_CERT_DIR" | "CURL_CA_BUNDLE" | "REQUESTS_CA_BUNDLE"
+    );
+    !(routing_suffix || routing_name)
+}
+
+fn set_dotenv_vars(path: &Path) {
+    for (k, v) in parse_dotenv(path) {
+        if !dotenv_var_allowed(&k) {
+            eprintln!(
+                "proofyloops: ignoring {k} from {} (set it in the real environment)",
+                path.display()
+            );
+            continue;
+        }
         if std::env::var(&k).ok().as_deref().unwrap_or("").is_empty() {
             std::env::set_var(k, v);
         }
     }
+}
+
+pub fn load_dotenv_if_present(repo_root: &Path) {
+    set_dotenv_vars(&repo_root.join(".env"));
 }
 
 fn env_truthy(name: &str, default_on: bool) -> bool {
@@ -920,11 +950,7 @@ pub fn load_dotenv_smart(repo_root: &Path) {
         {
             continue;
         }
-        for (k, v) in parse_dotenv(&p) {
-            if std::env::var(&k).ok().as_deref().unwrap_or("").is_empty() {
-                std::env::set_var(k, v);
-            }
-        }
+        set_dotenv_vars(&p);
         if has_any_llm_key() {
             break;
         }
@@ -1028,8 +1054,11 @@ fn decl_header_regex(decl_name: &str) -> Result<Regex, String> {
     // - modifiers: `private`, `protected`, `noncomputable`, `unsafe`, `partial`
     //
     // We intentionally stay line-anchored to avoid matching mentions inside proofs/comments.
+    //
+    // The name must end where a Lean identifier ends. `\b` is wrong both ways: `'` is not a
+    // word character, so `foo` matched the header of `foo'`, and `foo'` matched nothing.
     let pat = format!(
-        r"^\s*(?:@[^\n]*\s+)*(?:(?:private|protected|noncomputable|unsafe|partial)\s+)*\b(theorem|lemma|def|abbrev|instance)\s+{}\b",
+        r"^\s*(?:@[^\n]*\s+)*(?:(?:private|protected|noncomputable|unsafe|partial)\s+)*\b(theorem|lemma|def|abbrev|instance)\s+{}(?:[\s:(\[{{⦃]|$)",
         decl
     );
     Regex::new(&pat).map_err(|e| format!("invalid decl regex: {}", e))
@@ -1422,10 +1451,34 @@ pub fn extract_decl_block(text: &str, decl_name: &str) -> Result<String, String>
 }
 
 pub fn decl_block_contains_sorry(text: &str, decl_name: &str) -> Result<bool, String> {
-    let block = extract_decl_block(text, decl_name)?;
-    Ok(Regex::new(r"\b(sorry|admit)\b")
-        .map_err(|e| format!("invalid sorry/admit regex: {}", e))?
-        .is_match(&block))
+    let lines: Vec<&str> = text.lines().collect();
+    let pat = decl_header_regex(decl_name)?;
+    let start = lines
+        .iter()
+        .position(|ln| pat.is_match(ln))
+        .ok_or_else(|| format!("Could not find theorem/lemma/def named {}", decl_name))?;
+    let stop = decl_extent_end(&lines, start, 350)?;
+    let sorry_pat = Regex::new(r"\b(sorry|admit)\b")
+        .map_err(|e| format!("invalid sorry/admit regex: {}", e))?;
+    Ok(lines[start..stop]
+        .iter()
+        .any(|ln| !ln.trim_start().starts_with("--") && sorry_pat.is_match(ln)))
+}
+
+/// Exclusive end line of the declaration whose header is at `start`: the next
+/// top-level declaration or command, capped at `start + max_lines`. Scanning a
+/// fixed window past the header reached into the next declaration, so a
+/// proved declaration "found" and patched its neighbour's `sorry`.
+fn decl_extent_end(lines: &[&str], start: usize, max_lines: usize) -> Result<usize, String> {
+    let any_decl = any_decl_header_regex()?;
+    let top_level_cmd = Regex::new(
+        r"^(?:example|structure|inductive|class|namespace|section|end|mutual|axiom|opaque|#)\b",
+    )
+    .map_err(|e| format!("invalid top-level command regex: {}", e))?;
+    let cap = usize::min(lines.len(), start.saturating_add(max_lines));
+    Ok((start + 1..cap)
+        .find(|&j| any_decl.is_match(lines[j]) || top_level_cmd.is_match(lines[j]))
+        .unwrap_or(cap))
 }
 
 pub fn patch_first_sorry_in_decl(
@@ -1440,7 +1493,8 @@ pub fn patch_first_sorry_in_decl(
         .position(|ln| pat.is_match(ln))
         .ok_or_else(|| format!("Could not find theorem/lemma/def named {}", decl_name))?;
 
-    let stop = usize::min(lines.len(), start + 350);
+    let line_refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let stop = decl_extent_end(&line_refs, start, 350)?;
     let sorry_pat = Regex::new(r"\b(sorry|admit)\b")
         .map_err(|e| format!("invalid sorry/admit regex: {}", e))?;
 

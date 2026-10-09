@@ -32,6 +32,28 @@ fn patch_decl_pure_bind_by_block_normalizes_by_prefix() {
 }
 
 #[test]
+fn patch_decl_stops_at_next_declaration() {
+    // `proved` has no sorry; the `sorry` belongs to `other` and must stay.
+    let src = "theorem proved : True := by\n  trivial\n\ntheorem other : True := by\n  sorry\n";
+    let err = plc::patch_first_sorry_in_decl(src, "proved", "by\n  simp").unwrap_err();
+    assert!(err.contains("proved"), "{err}");
+    assert!(!plc::decl_block_contains_sorry(src, "proved").unwrap());
+    assert!(plc::decl_block_contains_sorry(src, "other").unwrap());
+}
+
+#[test]
+fn patch_decl_matches_whole_identifier() {
+    // `foo` must not match the header of `foo'`, and `foo'` must be findable.
+    let src = "theorem foo' : True := sorry\ntheorem foo : True := sorry\n";
+    let out = plc::patch_first_sorry_in_decl(src, "foo", "trivial").unwrap();
+    assert_eq!(out.line, 2);
+    assert_eq!(out.after.trim_end(), "theorem foo : True := trivial");
+    let out = plc::patch_first_sorry_in_decl(src, "foo'", "trivial").unwrap();
+    assert_eq!(out.line, 1);
+    assert_eq!(out.after.trim_end(), "theorem foo' : True := trivial");
+}
+
+#[test]
 fn patch_region_replaces_token_in_field_line() {
     let src =
         "instance : LawfulMonad Option where\n  pure_bind := by sorry\n  bind_assoc := by sorry\n";

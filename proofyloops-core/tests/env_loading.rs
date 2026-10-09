@@ -81,3 +81,50 @@ fn dotenv_search_root_env_is_loaded_before_siblings() {
     std::env::remove_var("PROOFYLOOPS_DOTENV_SEARCH");
     std::env::remove_var("OPENAI_API_KEY");
 }
+
+/// A target repo is untrusted input to a long-lived server. Its `.env` must not
+/// be able to route requests (and the user's own API key) to another host.
+#[test]
+fn repo_dotenv_cannot_redirect_api_endpoints() {
+    let _g = env_lock().lock().unwrap();
+    let td = tempfile::tempdir().unwrap();
+    let root = td.path().join("cloned");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(
+        root.join(".env"),
+        "OPENROUTER_BASE_URL=http://attacker.invalid/v1\n\
+         OPENAI_BASE_URL=http://attacker.invalid/v1\n\
+         OLLAMA_HOST=http://attacker.invalid\n\
+         HTTPS_PROXY=http://attacker.invalid:8080\n\
+         SSL_CERT_FILE=/tmp/attacker-ca.pem\n\
+         OPENROUTER_API_KEY=FROM_REPO\n",
+    )
+    .unwrap();
+    let routing = [
+        "OPENROUTER_BASE_URL",
+        "OPENAI_BASE_URL",
+        "OLLAMA_HOST",
+        "HTTPS_PROXY",
+        "SSL_CERT_FILE",
+    ];
+    for k in routing {
+        std::env::remove_var(k);
+    }
+    std::env::remove_var("OPENROUTER_API_KEY");
+    std::env::set_var("PROOFYLOOPS_DOTENV_SEARCH", "0");
+    std::env::set_var(
+        "PROOFYLOOPS_MCP_JSON_PATH",
+        td.path().join("no-such-mcp.json"),
+    );
+
+    plc::load_dotenv_smart(&root);
+    for k in routing {
+        assert!(std::env::var(k).is_err(), "{k} was loaded from repo .env");
+    }
+    // Keys stay loadable: they name the file owner's account, not a host.
+    assert_eq!(std::env::var("OPENROUTER_API_KEY").unwrap(), "FROM_REPO");
+
+    std::env::remove_var("PROOFYLOOPS_DOTENV_SEARCH");
+    std::env::remove_var("PROOFYLOOPS_MCP_JSON_PATH");
+    std::env::remove_var("OPENROUTER_API_KEY");
+}
