@@ -345,24 +345,13 @@ enum VarKind {
 }
 
 fn sanitize_name(s: &str) -> String {
-    let mut out = String::new();
-    for ch in s.chars() {
-        if ch.is_alphanumeric() || ch == '_' {
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-    }
-    if out.is_empty() {
-        out = "x".to_string();
-    }
-    if out
-        .chars()
-        .next()
-        .map(|c| c.is_ascii_digit())
-        .unwrap_or(false)
-    {
-        out.insert(0, '_');
+    // Encode every UTF-8 byte, including the encoding marker in source names.
+    // A fixed-width encoding is injective and produces only SMT simple-symbol
+    // characters; the prefix also keeps names clear of literals/reserved words.
+    use std::fmt::Write;
+    let mut out = String::from("plv_");
+    for byte in s.bytes() {
+        write!(out, "{byte:02x}").expect("writing to a String cannot fail");
     }
     out
 }
@@ -1905,6 +1894,44 @@ pub fn smt2_script_from_pp_dump(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smt_export_preserves_distinct_variable_names() {
+        // Public export must preserve variable identity, including names that
+        // resemble the encoder's output. Expected cardinality is independent
+        // of the particular encoding scheme.
+        for (left, right) in [
+            ("x", "y"),
+            ("x.y", "x_y"),
+            ("x", "plv_78"),
+            ("true", "false"),
+        ] {
+            let dump = serde_json::json!({"goals": [{
+                "pretty": format!("⊢ {left} <= {right}"),
+                "hyps": [{"text": format!("{left} : Nat")}, {"text": format!("{right} : Int")}]
+            }]});
+            let script = smt2_script_from_pp_dump(&dump, 100, 0, 0).expect("supported goal");
+            let names: Vec<_> = script
+                .lines()
+                .filter_map(|line| {
+                    line.strip_prefix("(declare-const ")
+                        .and_then(|rest| rest.strip_suffix(" Int)"))
+                })
+                .collect();
+            assert_eq!(names.len(), 2, "{left}, {right}: {script}");
+            assert_ne!(names[0], names[1]);
+            let nat_name = names
+                .iter()
+                .find(|name| script.contains(&format!("(assert (>= {name} 0))")))
+                .expect("Nat domain constraint");
+            let int_name = names.iter().find(|name| name != &nat_name).unwrap();
+            assert!(!script.contains(&format!("(assert (>= {int_name} 0))")));
+            assert!(
+                script.contains(&format!("(not (<= {nat_name} {int_name}))")),
+                "{script}"
+            );
+        }
+    }
 
     #[test]
     fn smt_unsat_proof_capture_smoke() {
