@@ -874,6 +874,10 @@ pub fn load_cursor_mcp_env_if_present() {
             let Some(vs) = vv.as_str() else {
                 continue;
             };
+            if !dotenv_var_allowed(k) {
+                eprintln!("proofyloops: ignoring {k} from ~/.cursor/mcp.json (set it in the real environment)");
+                continue;
+            }
             if std::env::var(k).ok().as_deref().unwrap_or("").is_empty() {
                 std::env::set_var(k, vs);
             }
@@ -883,24 +887,27 @@ pub fn load_cursor_mcp_env_if_present() {
 
 /// Load dotenv with covolume-style “super-workspace” convenience:
 /// - load `<repo_root>/.env`
-/// - if still no API keys, optionally scan sibling dirs (one-level deep) for a `.env`
-///   containing `OPENROUTER_API_KEY` or `OPENAI_API_KEY`
+/// - only with `PROOFYLOOPS_DOTENV_SEARCH` on, and while no API key is set:
+///   merge `~/.cursor/mcp.json` env blocks, then the search root's `.env`, then
+///   sibling dirs (one-level deep) whose `.env` holds a model API key
+///
+/// Credentials outside the repo belong to other projects and tools, so reading
+/// them is opt-in.
 ///
 /// Controls (all optional):
-/// - `PROOFYLOOPS_DOTENV_SEARCH` (default: on): set to 0/false/off to disable
+/// - `PROOFYLOOPS_DOTENV_SEARCH` (default: off): set to 1/true/on to enable
 /// - `PROOFYLOOPS_DOTENV_SEARCH_ROOT` (default: repo_root.parent): override search root
 pub fn load_dotenv_smart(repo_root: &Path) {
     // Base: repo-local .env
     load_dotenv_if_present(repo_root);
 
-    // Local convenience: Cursor MCP env blocks (never override).
-    load_cursor_mcp_env_if_present();
-
-    if has_any_llm_key() {
+    if has_any_llm_key() || !env_truthy("PROOFYLOOPS_DOTENV_SEARCH", false) {
         return;
     }
 
-    if !env_truthy("PROOFYLOOPS_DOTENV_SEARCH", true) {
+    // Local convenience: Cursor MCP env blocks (never override).
+    load_cursor_mcp_env_if_present();
+    if has_any_llm_key() {
         return;
     }
 

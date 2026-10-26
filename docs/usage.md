@@ -17,6 +17,21 @@ credentials, or sibling-project credentials. They use the environment explicitly
 passed to the process. This does not apply to optional model/research commands or
 other legacy commands that still resolve credentials.
 
+### Model credentials
+
+Model and research commands read `<repo_root>/.env` but never override a
+variable already set in the environment. Routing and CA variables (`*_BASE_URL`,
+`*_HOST`, `*_PROXY`, `SSL_CERT_FILE`, and similar) are ignored from any `.env`;
+set them in the real environment.
+
+Set `PROOFYLOOPS_DOTENV_SEARCH=1` to also look outside the repo while no
+`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `GROQ_API_KEY` is set, in this order:
+`mcpServers.*.env` in `~/.cursor/mcp.json` (path override:
+`PROOFYLOOPS_MCP_JSON_PATH`), the `.env` in the repo's parent directory
+(override: `PROOFYLOOPS_DOTENV_SEARCH_ROOT`), then sibling directories' `.env`
+files. This search is off by default because those files belong to other
+projects and tools.
+
 Verification runs Lean and may build missing dependencies. For a prepared checkout,
 set `PROOFYLOOPS_AUTO_BUILD=0` to disable automatic `lake build`. This is not a
 network sandbox: Lake and the target project's build configuration still control

@@ -11,5 +11,10 @@ These entries identify source changes without assigning a package release.
 
 ## Unreleased
 
+- Model credential lookup reads only `<repo_root>/.env` by default. Reading
+  `~/.cursor/mcp.json` and parent or sibling `.env` files now requires
+  `PROOFYLOOPS_DOTENV_SEARCH=1` (previously on unless set to 0).
+- `~/.cursor/mcp.json` env blocks go through the same filter as `.env` files:
+  endpoint, proxy and CA variables are ignored.
 - Documentation-only changes.
 
