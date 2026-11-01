@@ -1,32 +1,44 @@
 # proofyloops
 
-`proofyloops` is a CLI + MCP server for **debuggable Lean 4 workflows**: verify, locate `sorry`s, extract bounded context packs, and (optionally) call an OpenAI-compatible LLM.
+CLI and MCP server for debuggable Lean 4 proof workflows.
 
-For tactic-level proof search or dataset extraction, use Pantograph or
-LeanDojo; for an MCP view of Lean's language server (goals, diagnostics,
-hovers), use lean-lsp-mcp. proofyloops works one level up, on files and
-declarations: build them, find their `sorry`s, and patch them.
+`proofyloops` works on files and declarations in any Lean 4 project: verify
+them, locate their `sorry`s, extract bounded context packs, and patch them.
+Optional commands call an OpenAI-compatible model. For tactic-level proof
+search or dataset extraction, use Pantograph or LeanDojo; for an MCP view of
+Lean's language server (goals, diagnostics, hovers), use lean-lsp-mcp.
 
-### Design
+Commands take `--repo <lean-project>` plus a target file, print JSON to stdout,
+and write artifacts under `.generated/` when asked.
 
-- **Target-agnostic**: point at a Lean repo with `--repo`, then target a file/decl/region inside it.
-- **Evidence-first**: commands return structured JSON and can emit on-disk artifacts under `.generated/`.
+## Quickstart (CLI)
 
-### Quickstart (CLI)
-
-From this repo:
-
-```bash
-cargo run -p proofyloops --bin proofyloops -- --help
-```
-
-Typical command:
+From this repo, triage the bundled fixture (needs `lake` on PATH):
 
 ```bash
 cargo run -p proofyloops --bin proofyloops -- triage-file \
-  --repo /abs/path/to/lean-repo \
-  --file Some/File.lean
+  --repo fixtures/lean-fixture \
+  --file LeanFixture/SmtDemo.lean \
+  | jq '{ok: .verify.summary.ok, counts: .verify.summary.counts,
+         sorries: [.sorries.locations[] | {line, decl_name}],
+         next: .next_action.kind}'
 ```
+
+```json
+{
+  "ok": true,
+  "counts": { "errors": 0, "sorry_warnings": 3, "warnings": 3 },
+  "sorries": [
+    { "line": 12, "decl_name": "smt_int_trivial" },
+    { "line": 15, "decl_name": "smt_nat_monotone" },
+    { "line": 18, "decl_name": "smt_int_monotone" }
+  ],
+  "next": "patch_nearest_sorry"
+}
+```
+
+`ok: true` means the file compiles; the three `sorry` warnings mean it is not
+complete. Run `proofyloops --help` for the full command list.
 
 No MCP client or model account is needed for local triage, verification, or context
 packs. To install the CLI from this checkout:
@@ -38,7 +50,7 @@ cargo install --path proofyloops-cli
 See [CLI usage](docs/usage.md) for checking proof completeness, controlling builds,
 and interpreting JSON results.
 
-### Migrating from Proofpatch
+## Migrating from Proofpatch
 
 The CLI is now `proofyloops`; the server is `proofyloops-mcp`. Reinstall from
 this checkout and update executable paths in your MCP client, then restart it
@@ -47,22 +59,23 @@ to discover the renamed `proofyloops` and `proofyloops_*` tools.
 Use `proofyloops.toml` and `PROOFYLOOPS_*` settings. The old `proofpatch.toml`
 filename and `PROOFPATCH_*` runtime environment variables remain fallbacks;
 the new names take precedence. Rust package names and the Lean helper import
-are now `proofyloops-core` and `ProofyloopsTools`, respectively. Existing
-published packages are not renamed automatically.
+are now `proofyloops-core` and `ProofyloopsTools`, respectively.
 
-### MCP server
+## MCP server
+
+The server speaks MCP over stdio:
 
 ```bash
 cargo run -p proofyloops-mcp --bin proofyloops-mcp
 ```
 
-### SMT (optional oracle)
+## SMT (optional)
 
-`proofyloops` can use `smtkit` as a **heuristic signal** (never as a proof) for LIA entailment checks.
+`proofyloops` can use [`smtkit`](https://crates.io/crates/smtkit) to check
+linear integer arithmetic entailments. The result is a heuristic signal for
+ranking candidates, never a proof.
 
-### Quickstart: `tree-search-nearest` with SMT evidence
-
-If you have an SMT solver on PATH (e.g. `z3`), a good “debuggable” run is:
+With an SMT solver such as `z3` on PATH:
 
 ```bash
 proofyloops smt-probe
@@ -77,20 +90,20 @@ proofyloops tree-search-nearest \
   --output-json .generated/proofyloops-tree-search.json
 ```
 
-- `--goal-dump` + `--smt-precheck` makes SMT checks much more informative (it extracts hypotheses/targets).
+- `--goal-dump` extracts hypotheses and targets, which `--smt-precheck` needs
+  for informative checks.
 - `--smt-dump` writes bounded `.smt2` scripts to disk for inspection.
-- `--smt-repro-dir` writes a self-contained repro bundle you can re-run with `proofyloops smt-repro`.
+- `--smt-repro-dir` writes a repro bundle; re-run it with
+  `proofyloops smt-repro --input-json .generated/proofyloops-smtrepro/tree_search.json`.
 
-See `docs/smt.md` for:
-- how dumping/repro bundles work
-- UNSAT core / proof capture knobs
-- `smt-repro` usage
+[docs/smt.md](docs/smt.md) covers dump and repro bundles, UNSAT core and proof
+capture options, and `smt-repro`.
 
-### More docs
+## More docs
 
-- `docs/usage.md`: common CLI patterns, focus flags, output stability.
-- `lean-tools/README.md`: `ProofyloopsTools` (Lean side helper tactics).
-- `proofyloops-lean-embed/README.md`: optional Lean runtime embedding.
+- [docs/usage.md](docs/usage.md): common CLI patterns, focus flags, output stability.
+- [lean-tools/README.md](lean-tools/README.md): `ProofyloopsTools` (Lean-side helper tactics).
+- [proofyloops-lean-embed/README.md](proofyloops-lean-embed/README.md): optional Lean runtime embedding.
 
 ## License
 
