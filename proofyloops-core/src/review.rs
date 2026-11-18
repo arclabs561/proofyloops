@@ -259,13 +259,10 @@ pub fn is_sensitive_path(root: &Path, p: &Path) -> bool {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_lowercase();
-    if matches!(
+    matches!(
         ext.as_str(),
         "pdf" | "png" | "jpg" | "jpeg" | "gif" | "webp" | "zip" | "gz" | "xz" | "bz2"
-    ) {
-        return true;
-    }
-    false
+    )
 }
 
 pub fn filter_review_paths(root: &Path, paths: Vec<PathBuf>) -> Vec<PathBuf> {
