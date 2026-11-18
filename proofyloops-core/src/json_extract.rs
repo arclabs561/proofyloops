@@ -4,7 +4,7 @@ use serde_json::Value;
 ///
 /// This is intentionally conservative and dependency-free:
 /// - prefer ```json fenced blocks
-/// - otherwise parse the first `{ ... }` span
+/// - otherwise parse the first complete JSON object or array
 ///
 /// Returns `None` if no valid JSON object/array can be extracted.
 pub fn extract_first_json_value(s: &str) -> Option<Value> {
@@ -24,12 +24,41 @@ pub fn extract_first_json_value(s: &str) -> Option<Value> {
         }
     }
 
-    // 2) Fall back to parsing the first {...} span.
-    let i = s.find('{')?;
-    let j = s.rfind('}')?;
-    if j <= i {
-        return None;
+    // A model can emit prose or a second value after the first one. Ask the
+    // JSON parser where that value ends, including delimiters inside strings.
+    s.match_indices(['{', '[']).find_map(|(i, _)| {
+        serde_json::Deserializer::from_str(&s[i..])
+            .into_iter::<Value>()
+            .next()?
+            .ok()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_one_complete_value_from_prose() {
+        let reply = r#"first {"text":"} and ["} then {"next":2}"#;
+        assert_eq!(
+            extract_first_json_value(reply),
+            Some(json!({"text":"} and ["}))
+        );
+        assert_eq!(
+            extract_first_json_value("Tactics: [\"simp\", \"rfl\"] done"),
+            Some(json!(["simp", "rfl"]))
+        );
+        assert_eq!(
+            extract_first_json_value("[note] then {\"x\":1}"),
+            Some(json!({"x":1}))
+        );
     }
-    let cand = s[i..=j].trim();
-    serde_json::from_str::<Value>(cand).ok()
+
+    #[test]
+    fn explicit_json_fence_still_has_priority() {
+        let reply = "{\"example\":1}\n```json\n[2]\n```";
+        assert_eq!(extract_first_json_value(reply), Some(json!([2])));
+    }
 }
