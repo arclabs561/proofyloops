@@ -20,7 +20,7 @@ proofyloops-lean-embed = { version = "0.1.0", path = "../proofyloops-lean-embed"
  similar = "2"
  schemars = { version = "1.2.0", features = ["derive"] }
 smtkit = "0.1.0"
-sha2 = "0.10"
+sha2 = "0.11"
 
  [features]
 default = []
