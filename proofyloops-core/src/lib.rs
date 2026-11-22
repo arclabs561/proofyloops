@@ -2170,7 +2170,7 @@ pub fn build_proof_prompt(
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(prompt_combined.as_bytes());
-        format!("{:x}", h.finalize())
+        hex::encode(h.finalize())
     };
 
     Ok(PromptPayload {
@@ -2308,7 +2308,7 @@ pub fn build_rubberduck_prompt(
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(prompt_combined.as_bytes());
-        format!("{:x}", h.finalize())
+        hex::encode(h.finalize())
     };
 
     Ok(PromptPayload {
@@ -2419,7 +2419,7 @@ pub fn build_rubberduck_prompt_from_excerpt(
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(prompt_combined.as_bytes());
-        format!("{:x}", h.finalize())
+        hex::encode(h.finalize())
     };
 
     Ok(PromptPayload {
@@ -2504,7 +2504,7 @@ pub fn build_region_patch_prompt(
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(prompt_combined.as_bytes());
-        format!("{:x}", h.finalize())
+        hex::encode(h.finalize())
     };
 
     Ok(PromptPayload {
